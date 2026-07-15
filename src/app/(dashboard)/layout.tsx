@@ -21,7 +21,8 @@ import {
   Bell,
   Droplets,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  History
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -38,6 +39,7 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Indicadores', href: '/indicadores', icon: BarChart3 },
+  { name: 'Histórico', href: '/historico', icon: History },
   { name: 'Laboratório', href: '/laboratorio', icon: FlaskConical },
   { name: 'Utilidades', href: '/utilidades', icon: Gauge },
   { name: 'Insumos', href: '/insumos', icon: Package },
