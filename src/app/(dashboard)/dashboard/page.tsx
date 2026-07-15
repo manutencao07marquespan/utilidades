@@ -107,13 +107,6 @@ export default async function DashboardPage() {
           variant={activePumps === totalPumps ? 'success' : 'warning'}
         />
         <StatsCard
-          title="Alertas Ativos"
-          value={activeAlerts}
-          subtitle="requer atenção"
-          icon={AlertTriangle}
-          variant={activeAlerts > 0 ? 'danger' : 'success'}
-        />
-        <StatsCard
           title="pH Atual"
           value={latestPH.toFixed(2)}
           subtitle={latestPH >= 6 && latestPH <= 9 ? 'Na faixa ideal' : 'Fora da faixa'}
@@ -125,6 +118,13 @@ export default async function DashboardPage() {
           value={analyses?.length || 0}
           subtitle="registros"
           icon={BarChart3}
+          variant="default"
+        />
+        <StatsCard
+          title="Cisternas"
+          value={uniqueCisterns.length}
+          subtitle="monitoradas"
+          icon={Droplets}
           variant="default"
         />
       </div>
@@ -144,10 +144,6 @@ export default async function DashboardPage() {
 
         <DashboardGridItem>
           <PumpStatusCard pumps={pumps || []} />
-        </DashboardGridItem>
-
-        <DashboardGridItem>
-          <CriticalAlertsPanel alerts={alerts || []} />
         </DashboardGridItem>
 
         {/* Cistern Simulators - Dynamic from database */}

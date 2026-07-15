@@ -64,7 +64,7 @@ export default function LoginPage() {
               <Droplets className="w-10 h-10 text-white" strokeWidth={2.5} />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">
-              Portal das Utilidades
+              Portal de Utilidades
             </h1>
             <p className="text-white/60 text-sm">
               Sistema de Controle para ETE

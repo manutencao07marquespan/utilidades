@@ -20,10 +20,12 @@ import {
   X,
   Bell,
   Droplets,
-  BarChart3
+  BarChart3,
+  AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { AlertIndicator } from '@/components/shared/alert-indicator'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +46,7 @@ const navigation = [
   { name: 'Atividades', href: '/atividades-preventivas', icon: CalendarCheck },
   { name: 'Checklists', href: '/checklists', icon: ClipboardCheck },
   { name: 'Relatórios', href: '/relatorios', icon: FileText },
+  { name: 'Alertas', href: '/alertas', icon: AlertTriangle },
   { name: 'Usuários', href: '/usuarios', icon: Users },
 ]
 
@@ -96,7 +99,7 @@ export default function DashboardLayout({
                 <Droplets className="w-5 h-5 text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <span className="text-white font-semibold text-sm">Portal das</span>
+                <span className="text-white font-semibold text-sm">Portal de</span>
                 <span className="text-white/60 text-sm ml-1">Utilidades</span>
               </div>
             </Link>
@@ -156,13 +159,16 @@ export default function DashboardLayout({
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#28A745] to-[#218838] flex items-center justify-center shadow-md shadow-[#28A745]/20">
                 <Droplets className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
-              <span className="font-semibold text-sm">Portal das Utilidades</span>
+              <span className="font-semibold text-sm">Portal de Utilidades</span>
             </Link>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="hover:bg-accent/10">
-              <Bell className="h-5 w-5" />
-            </Button>
+            <Link href="/alertas">
+              <Button variant="ghost" size="icon" className="hover:bg-accent/10 relative">
+                <Bell className="h-5 w-5" />
+                <AlertIndicator />
+              </Button>
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full focus:outline-none">
                 <Avatar className="h-8 w-8">
@@ -221,9 +227,12 @@ export default function DashboardLayout({
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="hover:bg-accent/10 rounded-xl">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-            </Button>
+            <Link href="/alertas">
+              <Button variant="ghost" size="icon" className="hover:bg-accent/10 rounded-xl relative">
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                <AlertIndicator />
+              </Button>
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger className="rounded-full focus:outline-none">
                 <Avatar className="h-9 w-9">
