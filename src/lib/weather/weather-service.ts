@@ -1,5 +1,6 @@
 import { WeatherData, WeatherForecast, OperationalImpact } from './weather-types'
 
+// API Key from environment variable
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY || ''
 const OPENWEATHER_BASE_URL = 'https://api.openweathermap.org/data/2.5'
 
@@ -8,14 +9,18 @@ let weatherCache: { data: WeatherData; timestamp: number } | null = null
 let forecastCache: { data: WeatherForecast[]; timestamp: number } | null = null
 const CACHE_DURATION = 15 * 60 * 1000 // 15 minutes
 
-export async function getCurrentWeather(lat: number = -23.55, lon: number = -46.63): Promise<WeatherData | null> {
+// Default location: São Paulo, ETE
+const DEFAULT_LAT = -23.55
+const DEFAULT_LON = -46.63
+
+export async function getCurrentWeather(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON): Promise<WeatherData | null> {
   // Check cache
   if (weatherCache && Date.now() - weatherCache.timestamp < CACHE_DURATION) {
     return weatherCache.data
   }
 
   if (!OPENWEATHER_API_KEY) {
-    console.warn('OpenWeather API key not configured')
+    console.warn('OpenWeather API key not configured, using mock data')
     return getMockWeatherData()
   }
 
@@ -25,7 +30,8 @@ export async function getCurrentWeather(lat: number = -23.55, lon: number = -46.
     )
 
     if (!response.ok) {
-      throw new Error('Weather API error')
+      console.error('Weather API error:', response.status, response.statusText)
+      return getMockWeatherData()
     }
 
     const data = await response.json()
@@ -59,7 +65,7 @@ export async function getCurrentWeather(lat: number = -23.55, lon: number = -46.
   }
 }
 
-export async function getWeatherForecast(lat: number = -23.55, lon: number = -46.63): Promise<WeatherForecast[]> {
+export async function getWeatherForecast(lat: number = DEFAULT_LAT, lon: number = DEFAULT_LON): Promise<WeatherForecast[]> {
   // Check cache
   if (forecastCache && Date.now() - forecastCache.timestamp < CACHE_DURATION) {
     return forecastCache.data
@@ -75,7 +81,8 @@ export async function getWeatherForecast(lat: number = -23.55, lon: number = -46
     )
 
     if (!response.ok) {
-      throw new Error('Forecast API error')
+      console.error('Forecast API error:', response.status, response.statusText)
+      return getMockForecastData()
     }
 
     const data = await response.json()
