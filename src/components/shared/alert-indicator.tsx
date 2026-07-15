@@ -17,26 +17,34 @@ export function AlertIndicator() {
   }, [])
 
   async function checkAlerts() {
-    const { count } = await supabase
-      .from('alert_history')
-      .select('id', { count: 'exact', head: true })
-      .eq('acknowledged', false)
+    try {
+      const { count } = await supabase
+        .from('alert_history')
+        .select('id', { count: 'exact', head: true })
+        .eq('acknowledged', false)
 
-    if (count && count > 0) {
-      setHasAlerts(true)
-      setAlertCount(count)
-    } else {
-      setHasAlerts(false)
-      setAlertCount(0)
+      if (count && count > 0) {
+        setHasAlerts(true)
+        setAlertCount(count)
+      } else {
+        setHasAlerts(false)
+        setAlertCount(0)
+      }
+    } catch (error) {
+      console.error('Error checking alerts:', error)
     }
   }
 
-  if (!hasAlerts) return null
-
   return (
     <div className="relative">
-      <span className="absolute -top-1 -right-1 flex h-3 w-3">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#DC3545] opacity-75"></span>
+      <span className={cn(
+        "absolute -top-1 -right-1 flex h-3 w-3",
+        hasAlerts ? "opacity-100" : "opacity-0"
+      )}>
+        <span className={cn(
+          "absolute inline-flex h-full w-full rounded-full bg-[#DC3545] opacity-75",
+          hasAlerts && "animate-ping"
+        )}></span>
         <span className="relative inline-flex rounded-full h-3 w-3 bg-[#DC3545]"></span>
       </span>
     </div>
