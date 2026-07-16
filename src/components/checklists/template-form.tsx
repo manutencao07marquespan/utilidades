@@ -89,12 +89,24 @@ export function TemplateForm({ onSuccess }: TemplateFormProps) {
     try {
       const user = (await supabase.auth.getUser()).data.user
 
+      // Convert items to JSON
+      const itemsJson = items.map((item, index) => ({
+        id: item.id,
+        order: index,
+        question: item.question,
+        response_type: item.response_type,
+        is_required: item.is_required,
+        require_photo: item.require_photo,
+        weight: item.weight,
+      }))
+
       // Create template
       const { data: template, error: templateError } = await supabase
         .from('checklist_templates')
         .insert({
           name: formData.name,
           type: 'daily',
+          items: itemsJson,
           description: formData.description || null,
           category: formData.category,
           periodicity: formData.periodicity,
