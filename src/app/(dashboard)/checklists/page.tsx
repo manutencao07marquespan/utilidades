@@ -44,10 +44,13 @@ export default function ChecklistsPage() {
   const [stats, setStats] = useState({ pending: 0, completed: 0, nonConformities: 0, qrCodes: 0 })
   const [recentExecutions, setRecentExecutions] = useState<Execution[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
+  const [templates, setTemplates] = useState<any[]>([])
+  const [equipmentList, setEquipmentList] = useState<any[]>([])
   const [filters, setFilters] = useState({
     dateStart: '',
     dateEnd: '',
     template: '',
+    equipment: '',
     status: '',
     shift: '',
     nonConformity: false,
@@ -57,7 +60,17 @@ export default function ChecklistsPage() {
   useEffect(() => {
     fetchStats()
     fetchRecentExecutions()
+    fetchFilterData()
   }, [refreshKey])
+
+  async function fetchFilterData() {
+    const [templatesRes, equipmentRes] = await Promise.all([
+      supabase.from('checklist_templates').select('id, name').order('name'),
+      supabase.from('assets').select('id, name, asset_code').order('name'),
+    ])
+    if (templatesRes.data) setTemplates(templatesRes.data)
+    if (equipmentRes.data) setEquipmentList(equipmentRes.data)
+  }
 
   async function fetchStats() {
     const [executions, templates] = await Promise.all([
@@ -213,7 +226,7 @@ export default function ChecklistsPage() {
                     className="rounded" />
                   Apenas Não Conformidades
                 </label>
-                <Button variant="outline" size="sm" onClick={() => setFilters({ dateStart: '', dateEnd: '', template: '', status: '', shift: '', nonConformity: false })}>
+                <Button variant="outline" size="sm" onClick={() => setFilters({ dateStart: '', dateEnd: '', template: '', equipment: '', status: '', shift: '', nonConformity: false })}>
                   Limpar Filtros
                 </Button>
                 <Button size="sm" onClick={() => { setRefreshKey(k => k + 1); fetchRecentExecutions() }} className="btn-gradient-green text-white border-0">
