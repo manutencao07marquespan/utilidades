@@ -34,6 +34,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
   const [selectedEquipment, setSelectedEquipment] = useState('')
   const [equipmentList, setEquipmentList] = useState<any[]>([])
   const scannerRef = useRef<Html5Qrcode | null>(null)
+  const scanningRef = useRef(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -45,7 +46,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
   async function fetchTemplates() {
     const { data } = await supabase
       .from('checklist_templates')
-      .select('id, name, category, sector')
+      .select('id, name, category, sector, qr_code_data')
       .eq('is_active', true)
       .order('name')
     if (data) setTemplates(data)
@@ -82,6 +83,9 @@ export function QRScanner({ onScan }: QRScannerProps) {
   async function startCamera() {
     try {
       setError(null)
+      setSuccess(null)
+      scanningRef.current = false
+
       const scanner = new Html5Qrcode('qr-reader')
       scannerRef.current = scanner
 
@@ -91,28 +95,33 @@ export function QRScanner({ onScan }: QRScannerProps) {
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
+          disableFlip: false,
         },
         (decodedText) => {
+          if (scanningRef.current) return
+          scanningRef.current = true
           vibrate()
           playBeep()
           handleScanResult(decodedText)
-          stopCamera()
+          setTimeout(() => stopCamera(), 500)
         },
         () => {}
       )
       setCameraActive(true)
     } catch (err: any) {
-      console.error('Camera error:', err)
-      setError('Não foi possível acessar a câmera: ' + (err.message || 'Erro desconhecido'))
+      setError('Erro ao acessar câmera: ' + (err.message || 'Verifique permissões'))
     }
   }
 
   function stopCamera() {
     if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {})
-      scannerRef.current.clear()
+      try {
+        scannerRef.current.stop().catch(() => {})
+        scannerRef.current.clear()
+      } catch (e) {}
       scannerRef.current = null
     }
+    scanningRef.current = false
     setCameraActive(false)
   }
 
@@ -131,109 +140,77 @@ export function QRScanner({ onScan }: QRScannerProps) {
           .eq('qr_code_data', code.trim())
           .single()
 
-        if (tErr || !template) {
-          // Try searching by ID
-          const templateId = code.replace('CHECKLIST_', '').split('_')[0]
-          const { data: templateById } = await supabase
-            .from('checklist_templates')
-            .select('id, name, category, sector')
-            .eq('id', templateId)
-            .single()
-
-          if (templateById) {
-            setSuccess(`Checklist: ${templateById.name}`)
-            setTimeout(() => {
-              onScan({
-                equipment_id: '',
-                equipment_name: templateById.name,
-                equipment_code: templateById.id.substring(0, 8).toUpperCase(),
-                sector: templateById.sector || '-',
-                template_id: templateById.id,
-                template_name: templateById.name,
-              })
-              setScanning(false)
-            }, 800)
-            return
-          }
-
-          setError('Checklist não encontrado')
-          setScanning(false)
+        if (!tErr && template) {
+          setSuccess(`Checklist: ${template.name}`)
+          setTimeout(() => {
+            onScan({
+              equipment_id: '',
+              equipment_name: template.name,
+              equipment_code: template.id.substring(0, 8).toUpperCase(),
+              sector: template.sector || '-',
+              template_id: template.id,
+              template_name: template.name,
+            })
+            setScanning(false)
+          }, 800)
           return
         }
 
-        setSuccess(`Checklist: ${template.name}`)
-        setTimeout(() => {
-          onScan({
-            equipment_id: '',
-            equipment_name: template.name,
-            equipment_code: template.id.substring(0, 8).toUpperCase(),
-            sector: template.sector || '-',
-            template_id: template.id,
-            template_name: template.name,
-          })
-          setScanning(false)
-        }, 800)
-        return
-      }
-
-      // Legacy format: checklist:uuid
-      if (code.includes('checklist:') || code.includes('/checklists/scan/')) {
-        const templateId = code.replace('checklist:', '').replace('https://portalutilidades.com/checklists/scan/', '')
-        const { data: template, error: tErr } = await supabase
+        // Try all templates
+        const { data: allTemplates } = await supabase
           .from('checklist_templates')
-          .select('id, name, category, sector')
-          .eq('id', templateId.trim())
-          .single()
+          .select('id, name, category, sector, qr_code_data')
+          .eq('is_active', true)
 
-        if (tErr || !template) {
-          setError('Checklist não encontrado')
-          setScanning(false)
+        const match = allTemplates?.find((t: any) =>
+          t.qr_code_data === code || code.includes(t.id)
+        )
+
+        if (match) {
+          setSuccess(`Checklist: ${match.name}`)
+          setTimeout(() => {
+            onScan({
+              equipment_id: '',
+              equipment_name: match.name,
+              equipment_code: match.id.substring(0, 8).toUpperCase(),
+              sector: match.sector || '-',
+              template_id: match.id,
+              template_name: match.name,
+            })
+            setScanning(false)
+          }, 800)
           return
         }
-
-        setSuccess(`Checklist: ${template.name}`)
-        setTimeout(() => {
-          onScan({
-            equipment_id: '',
-            equipment_name: template.name,
-            equipment_code: template.id.substring(0, 8).toUpperCase(),
-            sector: template.sector || '-',
-            template_id: template.id,
-            template_name: template.name,
-          })
-          setScanning(false)
-        }, 800)
-        return
       }
 
       // Equipment QR
-      const { data: qrData, error: qrErr } = await supabase
+      const { data: qrData } = await supabase
         .from('equipment_qrcodes')
         .select('*, assets(name, asset_code, location)')
         .eq('qr_code', code.trim())
         .eq('status', 'active')
         .single()
 
-      if (qrErr || !qrData) {
-        setError('QR Code não encontrado: ' + code)
-        setScanning(false)
+      if (qrData) {
+        setSuccess(`Equipamento: ${qrData.assets?.name || code}`)
+        setTimeout(() => {
+          onScan({
+            equipment_id: qrData.equipment_id,
+            equipment_name: qrData.assets?.name || 'Desconhecido',
+            equipment_code: qrData.assets?.asset_code || code,
+            sector: qrData.sector || qrData.assets?.location || '-',
+            template_id: selectedTemplate || '',
+            template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Checklist',
+          })
+          setScanning(false)
+        }, 800)
         return
       }
 
-      setSuccess(`Equipamento: ${qrData.assets?.name || code}`)
-      setTimeout(() => {
-        onScan({
-          equipment_id: qrData.equipment_id,
-          equipment_name: qrData.assets?.name || 'Desconhecido',
-          equipment_code: qrData.assets?.asset_code || code,
-          sector: qrData.sector || qrData.assets?.location || '-',
-          template_id: selectedTemplate || '',
-          template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Checklist',
-        })
-        setScanning(false)
-      }, 800)
+      setError('QR Code não reconhecido')
+      setScanning(false)
     } catch (err: any) {
-      setError('Erro ao processar: ' + err.message)
+      setError('Erro: ' + err.message)
       setScanning(false)
     }
   }
@@ -287,7 +264,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
         </Alert>
       )}
 
-      {/* Camera Scanner */}
+      {/* Camera */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -364,7 +341,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
         </CardContent>
       </Card>
 
-      {/* Manual Code Input */}
+      {/* Manual Code */}
       <Card>
         <CardContent className="pt-6">
           <div className="space-y-2">
