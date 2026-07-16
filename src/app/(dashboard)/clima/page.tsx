@@ -139,22 +139,56 @@ export default function ClimaPage() {
         // Alerts API might not be available on free plan
       }
 
-      // Generate mock alerts based on weather conditions if no real alerts
-      if (alerts.length === 0 && currentWeather) {
+      // Generate alerts based on weather conditions (always check)
+      if (currentWeather) {
         const generatedAlerts: WeatherAlert[] = []
+
+        // Wind alerts
         if (currentWeather.windSpeed >= 40) {
           generatedAlerts.push({
-            id: 'wind',
+            id: 'wind-high',
             sender_name: 'INMET',
             event: 'Vendaval',
             start: Date.now(),
-            end: Date.now() + 6 * 3600 * 1000,
-            description: `Vento forte de ${currentWeather.windSpeed} km/h. Risco de danos a equipamentos expostos.`,
+            end: Date.now() + 24 * 3600 * 1000,
+            description: `Vento variando entre ${currentWeather.windSpeed} km/h. Risco de danos a equipamentos expostos e queda de galhos.`,
+          })
+        } else if (currentWeather.windSpeed >= 20) {
+          generatedAlerts.push({
+            id: 'wind-moderate',
+            sender_name: 'INMET',
+            event: 'Vento Moderado',
+            start: Date.now(),
+            end: Date.now() + 12 * 3600 * 1000,
+            description: `Vento de ${currentWeather.windSpeed} km/h. Monitorar equipamentos expostos.`,
           })
         }
+
+        // Humidity alerts
+        if (currentWeather.humidity <= 30) {
+          generatedAlerts.push({
+            id: 'humidity-low',
+            sender_name: 'INMET',
+            event: 'Baixa Umidade',
+            start: Date.now(),
+            end: Date.now() + 12 * 3600 * 1000,
+            description: `Umidade relativa do ar variando entre ${currentWeather.humidity}%. Risco de incêndios florestais e à saúde.`,
+          })
+        } else if (currentWeather.humidity <= 40) {
+          generatedAlerts.push({
+            id: 'humidity-low-moderate',
+            sender_name: 'INMET',
+            event: 'Umidade Baixa',
+            start: Date.now(),
+            end: Date.now() + 12 * 3600 * 1000,
+            description: `Umidade de ${currentWeather.humidity}%. Monitorar condições.`,
+          })
+        }
+
+        // Rain alerts
         if (currentWeather.precipitationMm >= 10) {
           generatedAlerts.push({
-            id: 'rain',
+            id: 'rain-high',
             sender_name: 'INMET',
             event: 'Chuva Intensa',
             start: Date.now(),
@@ -162,17 +196,22 @@ export default function ClimaPage() {
             description: `Precipitação de ${currentWeather.precipitationMm} mm/hora. Risco de alagamento.`,
           })
         }
+
+        // Heat alerts
         if (currentWeather.temperature >= 35) {
           generatedAlerts.push({
-            id: 'heat',
+            id: 'heat-high',
             sender_name: 'INMET',
             event: 'Calor Intenso',
             start: Date.now(),
-            end: Date.now() + 6 * 3600 * 1000,
-            description: `Temperatura de ${currentWeather.temperature}°C. Cuidado com operadores.`,
+            end: Date.now() + 12 * 3600 * 1000,
+            description: `Temperatura de ${currentWeather.temperature}°C. Risco à saúde dos operadores.`,
           })
         }
-        setAlerts(generatedAlerts)
+
+        // Combine with API alerts
+        const allAlerts = [...alerts, ...generatedAlerts]
+        setAlerts(allAlerts)
       }
 
       // Save to database
