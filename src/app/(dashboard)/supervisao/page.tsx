@@ -7,40 +7,49 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatsCard } from '@/components/shared/stats-card'
 import { StatusIndicator } from '@/components/shared/status-indicator'
 import {
-  Activity, Droplets, AlertTriangle, CheckCircle, Clock, Package,
-  TrendingUp, TrendingDown, Users, BarChart3, Gauge, Wrench,
-  Thermometer, Eye, CloudRain, DollarSign, Target
+  Activity, Droplets, AlertTriangle, CheckCircle, Clock, Users,
+  TrendingUp, TrendingDown, Timer, Target, BarChart3, UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
+interface OperatorStats {
+  name: string
+  userId: string
+  checklistsCompleted: number
+  avgTimeMinutes: number
+  totalTimeMinutes: number
+  nonConformities: number
+  lastChecklist: string | null
+}
+
+interface ShiftStats {
+  shift: string
+  label: string
+  checklists: number
+  avgTime: number
+  operators: number
+  operatorIds: string[]
+  nonConformities: number
+  efficiency: number
+}
+
 export default function SupervisaoPage() {
+  const [operatorStats, setOperatorStats] = useState<OperatorStats[]>([])
+  const [shiftStats, setShiftStats] = useState<ShiftStats[]>([])
   const [stats, setStats] = useState({
-    production: 0,
-    productionTarget: 1000,
-    efficiency: 0,
-    openOS: 0,
-    inProgressOS: 0,
-    completedOS: 0,
-    overdueOS: 0,
-    criticalNC: 0,
-    highNC: 0,
-    mediumNC: 0,
-    lowNC: 0,
-    costToday: 0,
-    costMonth: 0,
-    costPerM3: 0,
-    checklistsExecuted: 0,
-    avgChecklistTime: 0,
-    avgOSTime: 0,
-    equipmentAvailability: 0,
+    totalChecklists: 0,
+    avgTime: 0,
+    totalOperators: 0,
+    nonConformities: 0,
+    completedToday: 0,
+    inProgress: 0,
   })
-  const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [turnoAtual, setTurnoAtual] = useState('')
   const supabase = createClient()
 
   useEffect(() => {
-    fetchDashboardData()
+    fetchData()
     setTurnoAtual(getCurrentShift())
   }, [])
 
@@ -50,112 +59,121 @@ export default function SupervisaoPage() {
     return '1B'
   }
 
-  async function fetchDashboardData() {
+  async function fetchData() {
     setLoading(true)
     try {
-      const [osData, ncData, stockData, checklistData, equipmentData] = await Promise.all([
-        supabase.from('maintenance_orders').select('status, opened_at, finished_at'),
-        supabase.from('checklist_executions').select('has_non_conformity, non_conformity_count'),
-        supabase.from('products').select('current_stock, min_stock, name').eq('is_active', true),
-        supabase.from('checklist_executions').select('started_at, finished_at, status').eq('status', 'completed'),
-        supabase.from('assets').select('status'),
-      ])
+      // Fetch all executions today
+      const today = new Date().toISOString().split('T')[0]
+      const { data: executions } = await supabase
+        .from('checklist_executions')
+        .select('*, user_profiles(full_name)')
+        .gte('started_at', today)
+        .order('started_at', { ascending: false })
 
-      // OS stats
-      if (osData.data) {
-        const os = osData.data
-        setStats(prev => ({
-          ...prev,
-          openOS: os.filter((o: any) => o.status === 'open').length,
-          inProgressOS: os.filter((o: any) => o.status === 'in_progress').length,
-          completedOS: os.filter((o: any) => o.status === 'completed').length,
-          overdueOS: os.filter((o: any) => {
-            if (o.status === 'completed' || o.status === 'cancelled') return false
-            const opened = new Date(o.opened_at)
-            const daysSince = (Date.now() - opened.getTime()) / (1000 * 60 * 60 * 24)
-            return daysSince > 7
-          }).length,
-        }))
-      }
+      if (executions) {
+        // Calculate operator stats
+        const operatorMap = new Map<string, OperatorStats>()
+        executions.forEach((exec: any) => {
+          const userId = exec.user_id
+          const userName = exec.user_profiles?.full_name || 'Desconhecido'
+          const duration = exec.execution_duration ? exec.execution_duration / 60 : 0
 
-      // NC stats
-      if (ncData.data) {
-        const nc = ncData.data
-        setStats(prev => ({
-          ...prev,
-          criticalNC: nc.filter((n: any) => n.has_non_conformity).length,
-        }))
-      }
-
-      // Stock alerts
-      if (stockData.data) {
-        const critical = stockData.data.filter((p: any) => p.current_stock <= p.min_stock * 0.3)
-        setAlerts(prev => [
-          ...prev,
-          ...critical.map((p: any) => ({
-            type: 'stock',
-            message: `${p.name} - Estoque baixo (${p.current_stock})`,
-            severity: 'warning',
-          }))
-        ])
-      }
-
-      // Checklist stats
-      if (checklistData.data) {
-        const completed = checklistData.data
-        const avgTime = completed.reduce((sum: number, c: any) => {
-          if (c.started_at && c.finished_at) {
-            return sum + (new Date(c.finished_at).getTime() - new Date(c.started_at).getTime()) / 1000 / 60
+          if (!operatorMap.has(userId)) {
+            operatorMap.set(userId, {
+              name: userName,
+              userId,
+              checklistsCompleted: 0,
+              avgTimeMinutes: 0,
+              totalTimeMinutes: 0,
+              nonConformities: 0,
+              lastChecklist: null,
+            })
           }
-          return sum
-        }, 0) / (completed.length || 1)
 
-        setStats(prev => ({
-          ...prev,
-          checklistsExecuted: completed.length,
-          avgChecklistTime: Math.round(avgTime),
+          const stats = operatorMap.get(userId)!
+          stats.checklistsCompleted++
+          stats.totalTimeMinutes += duration
+          if (exec.has_non_conformity) stats.nonConformities++
+          if (!stats.lastChecklist || exec.started_at > stats.lastChecklist) {
+            stats.lastChecklist = exec.started_at
+          }
+        })
+
+        // Calculate averages
+        operatorMap.forEach(stats => {
+          stats.avgTimeMinutes = stats.checklistsCompleted > 0
+            ? Math.round(stats.totalTimeMinutes / stats.checklistsCompleted)
+            : 0
+        })
+
+        const operatorArray = Array.from(operatorMap.values())
+          .sort((a, b) => b.checklistsCompleted - a.checklistsCompleted)
+
+        setOperatorStats(operatorArray)
+
+        // Calculate shift stats
+        const shiftMap = new Map<string, ShiftStats>()
+        const shiftLabels: Record<string, string> = { '1A': 'Turno 1A (06h-18h)', '1B': 'Turno 1B (18h-06h)', '2A': 'Turno 2A', '2B': 'Turno 2B' }
+
+        executions.forEach((exec: any) => {
+          const execDate = new Date(exec.started_at)
+          const hour = execDate.getHours()
+          let shift = '1A'
+          if (hour >= 18 || hour < 6) shift = '1B'
+          else if (execDate.getDay() % 2 === 0) shift = '2A'
+          else shift = '2B'
+
+          if (!shiftMap.has(shift)) {
+            shiftMap.set(shift, {
+              shift,
+              label: shiftLabels[shift] || shift,
+              checklists: 0,
+              avgTime: 0,
+              operators: 0,
+              operatorIds: [] as string[],
+              nonConformities: 0,
+              efficiency: 0,
+            })
+          }
+
+          const s = shiftMap.get(shift)!
+          s.checklists++
+          if (!s.operatorIds.includes(exec.user_id)) {
+            s.operatorIds.push(exec.user_id)
+          }
+          if (exec.has_non_conformity) s.nonConformities++
+          if (exec.execution_duration) {
+            s.avgTime = (s.avgTime * (s.checklists - 1) + exec.execution_duration / 60) / s.checklists
+          }
+        })
+
+        const shiftArray = Array.from(shiftMap.values()).map(s => ({
+          ...s,
+          operators: s.operatorIds.length,
+          efficiency: Math.max(0, 100 - s.nonConformities * 5),
         }))
+        setShiftStats(shiftArray)
+
+        // Overall stats
+        const totalTime = executions.reduce((sum: number, e: any) =>
+          sum + (e.execution_duration ? e.execution_duration / 60 : 0), 0)
+        const completedCount = executions.filter((e: any) => e.status === 'completed').length
+        const ncCount = executions.filter((e: any) => e.has_non_conformity).length
+        const uniqueOperators = new Set(executions.map((e: any) => e.user_id))
+
+        setStats({
+          totalChecklists: executions.length,
+          avgTime: completedCount > 0 ? Math.round(totalTime / completedCount) : 0,
+          totalOperators: uniqueOperators.size,
+          nonConformities: ncCount,
+          completedToday: completedCount,
+          inProgress: executions.filter((e: any) => e.status === 'in_progress').length,
+        })
       }
-
-      // Equipment availability
-      if (equipmentData.data) {
-        const total = equipmentData.data.length
-        const active = equipmentData.data.filter((e: any) => e.status === 'active').length
-        setStats(prev => ({
-          ...prev,
-          equipmentAvailability: total > 0 ? Math.round((active / total) * 100) : 100,
-        }))
-      }
-
-      // Mock operational data
-      setStats(prev => ({
-        ...prev,
-        production: 985,
-        efficiency: 94,
-        costToday: 4820,
-        costMonth: 128000,
-        costPerM3: 0.92,
-        avgOSTime: 4.5,
-      }))
-
-      // Mock weather alerts
-      setAlerts(prev => [
-        ...prev,
-        { type: 'weather', message: 'Chuva prevista 92% - Impacto Alto', severity: 'critical' },
-      ])
-
     } catch (error) {
       console.error('Error:', error)
     }
     setLoading(false)
-  }
-
-  function getEfficiencyStars(eff: number) {
-    if (eff >= 95) return 5
-    if (eff >= 90) return 4
-    if (eff >= 80) return 3
-    if (eff >= 70) return 2
-    return 1
   }
 
   if (loading) {
@@ -170,244 +188,220 @@ export default function SupervisaoPage() {
     <div className="space-y-6">
       <PageHeader
         title="Painel da Supervisão"
-        description="Centro de Operações da ETE"
+        description="Avaliação da equipe e tempo de checklists"
       />
 
-      {/* Header Info */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>Última atualização: {new Date().toLocaleString('pt-BR')}</span>
         <span>Turno Atual: <strong className="text-foreground">{turnoAtual}</strong></span>
       </div>
 
-      {/* Main Stats */}
+      {/* Stats Gerais */}
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Produção"
-          value={`${stats.production} m³`}
-          subtitle={`Meta: ${stats.productionTarget} m³ (${Math.round(stats.production / stats.productionTarget * 100)}%)`}
-          icon={Droplets}
-          variant={stats.production >= stats.productionTarget ? 'success' : 'warning'}
-        />
-        <StatsCard
-          title="Eficiência"
-          value={`${stats.efficiency}%`}
-          subtitle={`${getEfficiencyStars(stats.efficiency)} estrelas`}
-          icon={Target}
-          variant={stats.efficiency >= 90 ? 'success' : stats.efficiency >= 80 ? 'warning' : 'danger'}
-        />
-        <StatsCard
-          title="OS Abertas"
-          value={stats.openOS}
-          subtitle={`${stats.inProgressOS} em andamento`}
-          icon={Wrench}
-          variant={stats.openOS > 10 ? 'danger' : stats.openOS > 5 ? 'warning' : 'success'}
-        />
-        <StatsCard
-          title="Não Conformidades"
-          value={stats.criticalNC}
-          subtitle="críticas"
-          icon={AlertTriangle}
-          variant={stats.criticalNC > 0 ? 'danger' : 'success'}
-        />
-      </div>
-
-      {/* Secondary Stats */}
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Custos Hoje"
-          value={`R$ ${stats.costToday.toLocaleString('pt-BR')}`}
-          subtitle={`Mês: R$ ${stats.costMonth.toLocaleString('pt-BR')}`}
-          icon={DollarSign}
-          variant="default"
-        />
-        <StatsCard
-          title="Custo por m³"
-          value={`R$ ${stats.costPerM3.toFixed(2)}`}
-          subtitle="custo operacional"
-          icon={TrendingUp}
-          variant={stats.costPerM3 <= 1 ? 'success' : 'warning'}
-        />
         <StatsCard
           title="Checklists Hoje"
-          value={stats.checklistsExecuted}
-          subtitle={`Tempo médio: ${stats.avgChecklistTime}min`}
+          value={stats.totalChecklists}
+          subtitle={`${stats.completedToday} concluídos`}
           icon={CheckCircle}
           variant="success"
         />
         <StatsCard
-          title="Disponibilidade"
-          value={`${stats.equipmentAvailability}%`}
-          subtitle="equipamentos ativos"
-          icon={Gauge}
-          variant={stats.equipmentAvailability >= 95 ? 'success' : 'warning'}
+          title="Tempo Médio"
+          value={`${stats.avgTime} min`}
+          subtitle="por checklist"
+          icon={Timer}
+          variant="default"
+        />
+        <StatsCard
+          title="Equipe Ativa"
+          value={stats.totalOperators}
+          subtitle="operadores hoje"
+          icon={Users}
+          variant="default"
+        />
+        <StatsCard
+          title="Não Conformidades"
+          value={stats.nonConformities}
+          subtitle="registradas hoje"
+          icon={AlertTriangle}
+          variant={stats.nonConformities > 0 ? 'danger' : 'success'}
         />
       </div>
 
-      {/* Main Grid */}
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {/* KPIs */}
+        {/* Desempenho da Equipe */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <BarChart3 className="h-4 w-4 text-[#1A3A5A]" />
-              Indicadores de Desempenho
+              <UserCheck className="h-4 w-4 text-[#28A745]" />
+              Desempenho da Equipe
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'MTBF', value: '480h', icon: Clock },
-                { label: 'MTTR', value: '1.8h', icon: Wrench },
-                { label: 'Consumo PAC', value: '-3%', icon: TrendingDown, color: 'text-[#28A745]' },
-                { label: 'Consumo Energia', value: '+5%', icon: TrendingUp, color: 'text-[#DC3545]' },
-                { label: 'Eficiência Turno', value: '94%', icon: Target },
-                { label: 'Eficiência Mensal', value: '92%', icon: Target },
-                { label: 'Retrabalho', value: '2%', icon: AlertTriangle, color: 'text-[#FFC107]' },
-                { label: 'Manutenção Prev.', value: '85%', icon: CheckCircle },
-              ].map((kpi, i) => (
-                <div key={i} className="p-3 rounded-xl bg-muted/30 text-center">
-                  <kpi.icon className={cn('h-5 w-5 mx-auto mb-1', kpi.color || 'text-muted-foreground')} />
-                  <p className="text-lg font-bold">{kpi.value}</p>
-                  <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                </div>
-              ))}
-            </div>
+            {operatorStats.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">Nenhum checklist executado hoje</p>
+            ) : (
+              <div className="space-y-3">
+                {operatorStats.map((op, i) => {
+                  const maxChecklists = Math.max(...operatorStats.map(o => o.checklistsCompleted))
+                  const barWidth = maxChecklists > 0 ? (op.checklistsCompleted / maxChecklists) * 100 : 0
+                  const avgTarget = 10 // Meta: 10 min por checklist
+                  const timeStatus = op.avgTimeMinutes <= avgTarget ? 'ok' : op.avgTimeMinutes <= avgTarget * 1.5 ? 'warning' : 'critical'
+
+                  return (
+                    <div key={op.userId} className="p-4 rounded-xl bg-muted/30 border border-border/50">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#28A745] to-[#218838] flex items-center justify-center text-white text-sm font-bold">
+                            {op.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{op.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {op.checklistsCompleted} checklists • {op.avgTimeMinutes} min médio
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {op.nonConformities > 0 && (
+                            <span className="text-xs font-medium text-[#FFC107]">⚠ {op.nonConformities}</span>
+                          )}
+                          <StatusIndicator
+                            variant={timeStatus}
+                            label={timeStatus === 'ok' ? 'Bom' : timeStatus === 'warning' ? 'Atenção' : 'Lento'}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            'h-full rounded-full transition-all duration-500',
+                            timeStatus === 'ok' ? 'bg-[#28A745]' : timeStatus === 'warning' ? 'bg-[#FFC107]' : 'bg-[#DC3545]'
+                          )}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                        <span>Total: {Math.round(op.totalTimeMinutes)} min</span>
+                        <span>Média: {op.avgTimeMinutes} min/checklist</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Alarmes */}
-        <Card className="border-l-4 border-l-[#DC3545]">
+        {/* Desempenho por Turno */}
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <AlertTriangle className="h-4 w-4 text-[#DC3545]" />
-              Alarmes Ativos
+              <Clock className="h-4 w-4 text-[#00b4d8]" />
+              Por Turno
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {alerts.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum alarme ativo</p>
-              ) : (
-                alerts.slice(0, 5).map((alert, i) => (
-                  <div key={i} className={cn(
-                    'p-2 rounded-lg text-sm border-l-4',
-                    alert.severity === 'critical' && 'border-l-[#DC3545] bg-[#DC3545]/5',
-                    alert.severity === 'warning' && 'border-l-[#FFC107] bg-[#FFC107]/5',
-                    alert.severity === 'info' && 'border-l-[#00b4d8] bg-[#00b4d8]/5',
+            {shiftStats.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">Sem dados</p>
+            ) : (
+              <div className="space-y-4">
+                {shiftStats.map(s => (
+                  <div key={s.shift} className={cn(
+                    'p-4 rounded-xl border',
+                    s.shift === turnoAtual ? 'border-[#28A745] bg-[#28A745]/5' : 'border-border'
                   )}>
-                    {alert.message}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-sm">{s.label}</span>
+                      {s.shift === turnoAtual && (
+                        <StatusIndicator variant="ok" label="Atual" />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Checklists</p>
+                        <p className="font-bold text-lg">{s.checklists}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tempo Médio</p>
+                        <p className="font-bold text-lg">{Math.round(s.avgTime)} min</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Operadores</p>
+                        <p className="font-bold text-lg">{s.operators}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Eficiência</p>
+                        <p className={cn('font-bold text-lg', s.efficiency >= 90 ? 'text-[#28A745]' : 'text-[#FFC107]')}>
+                          {s.efficiency}%
+                        </p>
+                      </div>
+                    </div>
+                    {s.nonConformities > 0 && (
+                      <div className="mt-2 flex items-center gap-1 text-xs text-[#FFC107]">
+                        <AlertTriangle className="h-3 w-3" />
+                        {s.nonConformities} não conformidade(s)
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Centro de Decisão */}
-        <Card className="lg:col-span-2 border-l-4 border-l-[#00b4d8]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-[#00b4d8]" />
-              Centro de Decisão
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="p-4 rounded-xl bg-[#00b4d8]/5 border border-[#00b4d8]/20">
-              <p className="font-medium text-sm mb-2">Recomendações Operacionais</p>
-              <ul className="space-y-1.5">
-                <li className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-[#28A745]" />
-                  Verificar gradeamento de entrada (chuva prevista)
-                </li>
-                <li className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-[#28A745]" />
-                  Confirmar disponibilidade da bomba reserva
-                </li>
-                <li className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-[#28A745]" />
-                  Suspender abertura de leitos de secagem
-                </li>
-                <li className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-[#28A745]" />
-                  Conferir estoque de PAC e polímero
-                </li>
-                <li className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="h-4 w-4 text-[#28A745]" />
-                  Aumentar monitoramento de pH e turbidez
-                </li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Equipamentos com Mais Manutenção */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Wrench className="h-4 w-4 text-[#FFC107]" />
-              Top Equipamentos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[
-                { name: 'Bomba 03', issues: 8, trend: 'up' },
-                { name: 'Decantador 02', issues: 5, trend: 'up' },
-                { name: 'Bomba 01', issues: 3, trend: 'down' },
-                { name: 'Gradeamento', issues: 2, trend: 'stable' },
-              ].map((eq, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground w-4">{i + 1}.</span>
-                    <span className="text-sm">{eq.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-medium">{eq.issues}</span>
-                    {eq.trend === 'up' && <TrendingUp className="h-3 w-3 text-[#DC3545]" />}
-                    {eq.trend === 'down' && <TrendingDown className="h-3 w-3 text-[#28A745]" />}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Turnos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Users className="h-4 w-4 text-[#00b4d8]" />
-              Desempenho por Turno
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[
-                { shift: '1A', efficiency: 96, issues: 3 },
-                { shift: '1B', efficiency: 92, issues: 5 },
-                { shift: '2A', efficiency: 94, issues: 4 },
-                { shift: '2B', efficiency: 88, issues: 7 },
-              ].map((s, i) => (
-                <div key={i} className="p-3 rounded-lg bg-muted/30">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium">Turno {s.shift}</span>
-                    <span className={cn('text-sm font-bold', s.efficiency >= 90 ? 'text-[#28A745]' : 'text-[#FFC107]')}>
-                      {s.efficiency}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={cn('h-full rounded-full', s.efficiency >= 90 ? 'bg-[#28A745]' : 'bg-[#FFC107]')}
-                      style={{ width: `${s.efficiency}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{s.issues} ocorrências</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Comparativo de Tempos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Timer className="h-4 w-4 text-[#FFC107]" />
+            Comparativo de Tempo por Operador
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {operatorStats.map((op, i) => {
+              const maxTime = Math.max(...operatorStats.map(o => o.avgTimeMinutes), 1)
+              const barWidth = (op.avgTimeMinutes / maxTime) * 100
+              const isSlow = op.avgTimeMinutes > 10
+
+              return (
+                <div key={op.userId} className="flex items-center gap-3">
+                  <span className="text-sm font-medium w-32 truncate">{op.name}</span>
+                  <div className="flex-1 h-6 bg-muted rounded-lg overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full rounded-lg flex items-center px-2 text-xs font-medium text-white',
+                        isSlow ? 'bg-[#FFC107]' : 'bg-[#28A745]'
+                      )}
+                      style={{ width: `${Math.max(barWidth, 10)}%` }}
+                    >
+                      {op.avgTimeMinutes} min
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground w-16 text-right">
+                    {op.checklistsCompleted} check
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[#28A745]"></div>
+              ≤ 10 min (meta)
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-[#FFC107]"></div>
+              {'>'} 10 min (acima da meta)
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
