@@ -181,6 +181,15 @@ export function ExecutionDetail({ executionId, onBack }: ExecutionDetailProps) {
             <div className="mt-3 flex items-center gap-2 text-white/50 text-xs">
               <MapPin className="h-3 w-3" />
               GPS: {execution.latitude?.toFixed(6)}, {execution.longitude?.toFixed(6)}
+              <a
+                href={`https://www.google.com/maps/place/${execution.latitude}S${Math.abs(execution.longitude)}W/@${execution.latitude},${execution.longitude},17z`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#00b4d8] hover:underline ml-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Abrir no Maps
+              </a>
             </div>
           )}
         </CardContent>
