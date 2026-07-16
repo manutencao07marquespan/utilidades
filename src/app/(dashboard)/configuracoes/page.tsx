@@ -13,7 +13,7 @@ import { usePermissions } from '@/hooks/use-permissions'
 import {
   Settings, Save, Building, MapPin, Bell, Shield,
   Database, RefreshCw, CheckCircle, AlertTriangle,
-  Droplets, Mail, Globe, Clock, Loader2
+  Droplets, Mail, Globe, Clock, Loader2, Gauge
 } from 'lucide-react'
 
 interface SystemConfig {
@@ -47,6 +47,18 @@ export default function ConfiguracoesPage() {
     alert_cistern_min: '20',
     enable_whatsapp: false,
     whatsapp_number: '',
+
+    // Configurações de Alertas - Horímetros
+    alert_horimeter_min_interval: '6',
+    alert_horimeter_max_interval: '48',
+    alert_horimeter_warning_hours: '200',
+    alert_horimeter_critical_hours: '250',
+
+    // Configurações de Alertas - Hidrômetros
+    alert_hydrant_min_interval: '6',
+    alert_hydrant_max_interval: '24',
+    alert_hydrant_deviation_percent: '20',
+    alert_hydrant_critical_level: '50',
 
     // Configurações de Relatórios
     report_auto_generate: false,
@@ -264,56 +276,166 @@ export default function ConfiguracoesPage() {
 
         {/* Alertas */}
         <TabsContent value="alerts">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
-                Configurações de Alertas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>pH Mínimo</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={config.alert_ph_min}
-                    onChange={(e) => setConfig({ ...config, alert_ph_min: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Alerta abaixo deste valor</p>
+          <div className="space-y-6">
+            {/* Alertas Gerais */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Alertas Gerais
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label>pH Mínimo</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={config.alert_ph_min}
+                      onChange={(e) => setConfig({ ...config, alert_ph_min: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta abaixo</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>pH Máximo</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={config.alert_ph_max}
+                      onChange={(e) => setConfig({ ...config, alert_ph_max: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta acima</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Turbidez Máxima (NTU)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_turbidity_max}
+                      onChange={(e) => setConfig({ ...config, alert_turbidity_max: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nível Mín. Cisterna (%)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_cistern_min}
+                      onChange={(e) => setConfig({ ...config, alert_cistern_min: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>pH Máximo</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={config.alert_ph_max}
-                    onChange={(e) => setConfig({ ...config, alert_ph_max: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Alerta acima deste valor</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Turbidez Máxima (NTU)</Label>
-                  <Input
-                    type="number"
-                    value={config.alert_turbidity_max}
-                    onChange={(e) => setConfig({ ...config, alert_turbidity_max: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nível Mínimo Cisterna (%)</Label>
-                  <Input
-                    type="number"
-                    value={config.alert_cistern_min}
-                    onChange={(e) => setConfig({ ...config, alert_cistern_min: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Alerta quando nível abaixo</p>
-                </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <div className="pt-4 border-t">
-                <h4 className="text-sm font-medium mb-3">Notificações WhatsApp</h4>
+            {/* Alertas de Horímetro */}
+            <Card className="border-l-4 border-l-[#FFC107]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Clock className="h-4 w-4 text-[#FFC107]" />
+                  Parâmetros de Alerta - Horímetros
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Intervalo Mínimo entre Leituras (horas)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_horimeter_min_interval}
+                      onChange={(e) => setConfig({ ...config, alert_horimeter_min_interval: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta se leitura inferior a este intervalo</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Intervalo Máximo entre Leituras (horas)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_horimeter_max_interval}
+                      onChange={(e) => setConfig({ ...config, alert_horimeter_max_interval: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta se leitura superior a este intervalo</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Horas para Aviso (warning)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_horimeter_warning_hours}
+                      onChange={(e) => setConfig({ ...config, alert_horimeter_warning_hours: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Próxima manutenção preventiva</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Horas para Alerta Crítico</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_horimeter_critical_hours}
+                      onChange={(e) => setConfig({ ...config, alert_horimeter_critical_hours: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Manutenção urgentemente necessária</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Alertas de Hidrômetro */}
+            <Card className="border-l-4 border-l-[#00b4d8]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Gauge className="h-4 w-4 text-[#00b4d8]" />
+                  Parâmetros de Alerta - Hidrômetros
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Intervalo Mínimo entre Leituras (horas)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_hydrant_min_interval}
+                      onChange={(e) => setConfig({ ...config, alert_hydrant_min_interval: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta se leitura inferior</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Intervalo Máximo entre Leituras (horas)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_hydrant_max_interval}
+                      onChange={(e) => setConfig({ ...config, alert_hydrant_max_interval: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta se leitura superior</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Desvio Máximo Permitido (%)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_hydrant_deviation_percent}
+                      onChange={(e) => setConfig({ ...config, alert_hydrant_deviation_percent: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta se desvio da média</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nível Crítico (m³)</Label>
+                    <Input
+                      type="number"
+                      value={config.alert_hydrant_critical_level}
+                      onChange={(e) => setConfig({ ...config, alert_hydrant_critical_level: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Alerta quando atingir</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* WhatsApp */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Mail className="h-4 w-4" />
+                  Notificações WhatsApp
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2">
                     <input
@@ -326,7 +448,7 @@ export default function ConfiguracoesPage() {
                   </label>
                 </div>
                 {config.enable_whatsapp && (
-                  <div className="mt-3">
+                  <div className="space-y-2">
                     <Label>Número WhatsApp</Label>
                     <Input
                       value={config.whatsapp_number}
@@ -336,9 +458,9 @@ export default function ConfiguracoesPage() {
                     />
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Relatórios */}
