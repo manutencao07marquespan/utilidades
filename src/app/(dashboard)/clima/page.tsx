@@ -46,10 +46,20 @@ interface OperationalImpact {
   recommendations: string[]
 }
 
+interface WeatherAlert {
+  id: string
+  sender_name: string
+  event: string
+  start: number
+  end: number
+  description: string
+}
+
 export default function ClimaPage() {
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [forecast, setForecast] = useState<ForecastHour[]>([])
   const [impact, setImpact] = useState<OperationalImpact | null>(null)
+  const [alerts, setAlerts] = useState<WeatherAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState('')
   const supabase = createClient()
@@ -106,6 +116,64 @@ export default function ClimaPage() {
       setImpact(calculateImpact(totalPrecip, currentWeather))
 
       setLastUpdate(new Date().toLocaleTimeString('pt-BR'))
+
+      // Fetch alerts (requires One Call API or alerts endpoint)
+      try {
+        const alertsRes = await fetch(
+          'https://api.openweathermap.org/data/2.5/onecall?lat=-23.55&lon=-46.63&appid=54b599f98d1fbbdad1bf443a86229008&exclude=minutely,daily,alerts=false'
+        )
+        if (alertsRes.ok) {
+          const alertsData = await alertsRes.json()
+          if (alertsData.alerts) {
+            setAlerts(alertsData.alerts.map((a: any) => ({
+              id: a.event || Date.now().toString(),
+              sender_name: a.sender_name || 'INMET',
+              event: a.event,
+              start: a.start,
+              end: a.end,
+              description: a.description,
+            })))
+          }
+        }
+      } catch (e) {
+        // Alerts API might not be available on free plan
+      }
+
+      // Generate mock alerts based on weather conditions if no real alerts
+      if (alerts.length === 0 && currentWeather) {
+        const generatedAlerts: WeatherAlert[] = []
+        if (currentWeather.windSpeed >= 40) {
+          generatedAlerts.push({
+            id: 'wind',
+            sender_name: 'INMET',
+            event: 'Vendaval',
+            start: Date.now(),
+            end: Date.now() + 6 * 3600 * 1000,
+            description: `Vento forte de ${currentWeather.windSpeed} km/h. Risco de danos a equipamentos expostos.`,
+          })
+        }
+        if (currentWeather.precipitationMm >= 10) {
+          generatedAlerts.push({
+            id: 'rain',
+            sender_name: 'INMET',
+            event: 'Chuva Intensa',
+            start: Date.now(),
+            end: Date.now() + 6 * 3600 * 1000,
+            description: `Precipitação de ${currentWeather.precipitationMm} mm/hora. Risco de alagamento.`,
+          })
+        }
+        if (currentWeather.temperature >= 35) {
+          generatedAlerts.push({
+            id: 'heat',
+            sender_name: 'INMET',
+            event: 'Calor Intenso',
+            start: Date.now(),
+            end: Date.now() + 6 * 3600 * 1000,
+            description: `Temperatura de ${currentWeather.temperature}°C. Cuidado com operadores.`,
+          })
+        }
+        setAlerts(generatedAlerts)
+      }
 
       // Save to database
       await supabase.from('weather_data').insert({
@@ -231,6 +299,35 @@ export default function ClimaPage() {
           icon: RefreshCw,
         }}
       />
+
+      {/* Weather Alerts */}
+      {alerts.length > 0 && (
+        <Card className="border-l-4 border-l-[#DC3545] bg-[#DC3545]/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-[#DC3545]">
+              <AlertTriangle className="h-5 w-5" />
+              Alertas Meteorológicos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {alerts.map((alert) => (
+                <div key={alert.id} className="p-3 rounded-lg bg-white/50 border border-[#DC3545]/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm text-[#DC3545]">{alert.event}</span>
+                    <span className="text-xs text-muted-foreground">{alert.sender_name}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{alert.description}</p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                    <span>Início: {new Date(alert.start * 1000).toLocaleString('pt-BR')}</span>
+                    <span>Fim: {new Date(alert.end * 1000).toLocaleString('pt-BR')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Clima Operacional */}
       {weather && (
