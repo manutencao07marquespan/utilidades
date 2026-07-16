@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { StatusIndicator } from '@/components/shared/status-indicator'
-import { Loader2, CheckCircle, Clock, MapPin, AlertTriangle } from 'lucide-react'
+import { Loader2, CheckCircle, Clock, MapPin, AlertTriangle, ArrowLeft } from 'lucide-react'
 
 interface QRData {
   equipment_id: string
@@ -19,11 +19,11 @@ interface QRData {
 }
 
 interface TemplateItem {
-  id: string
+  id?: string
   question: string
   response_type: string
   is_required: boolean
-  weight: number
+  weight?: number
 }
 
 interface ChecklistExecutionProps {
@@ -34,19 +34,24 @@ interface ChecklistExecutionProps {
 
 export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistExecutionProps) {
   const [items, setItems] = useState<TemplateItem[]>([])
-  const [responses, setResponses] = useState<Record<string, string>>({})
+  const [responses, setResponses] = useState<Record<number, string>>({})
   const [observations, setObservations] = useState('')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [startTime] = useState(new Date())
+  const [elapsedTime, setElapsedTime] = useState(0)
   const [gpsData, setGpsData] = useState<{ lat: number; lng: number; accuracy: number } | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
     fetchTemplateItems()
     requestGeolocation()
+    const timer = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime.getTime()) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
   }, [])
 
   async function fetchTemplateItems() {
@@ -55,6 +60,20 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       return
     }
 
+    // First try to get items from the template's JSONB column
+    const { data: template } = await supabase
+      .from('checklist_templates')
+      .select('items')
+      .eq('id', qrData.template_id)
+      .single()
+
+    if (template?.items && Array.isArray(template.items)) {
+      setItems(template.items)
+      setLoading(false)
+      return
+    }
+
+    // Fallback to separate items table
     const { data } = await supabase
       .from('checklist_template_items')
       .select('*')
@@ -77,15 +96,19 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
             accuracy: position.coords.accuracy,
           })
         },
-        (error) => {
-          console.log('Geolocation not available:', error.message)
-        }
+        () => {}
       )
     }
   }
 
-  function handleResponse(itemId: string, value: string) {
-    setResponses({ ...responses, [itemId]: value })
+  function handleResponse(index: number, value: string) {
+    setResponses({ ...responses, [index]: value })
+  }
+
+  function formatTime(seconds: number) {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
   async function handleSubmit() {
@@ -96,12 +119,12 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       const user = (await supabase.auth.getUser()).data.user
       const endTime = new Date()
 
-      // Create execution
+      // Create execution record
       const { data: execution, error: execError } = await supabase
         .from('checklist_executions')
         .insert({
           template_id: qrData.template_id || null,
-          equipment_id: qrData.equipment_id,
+          equipment_id: qrData.equipment_id || null,
           user_id: user?.id,
           started_at: startTime.toISOString(),
           finished_at: endTime.toISOString(),
@@ -116,40 +139,33 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
 
       if (execError) throw execError
 
-      // Create responses
-      const responsesToInsert = items.map(item => ({
+      // Save responses
+      const responsesToInsert = items.map((item, index) => ({
         execution_id: execution.id,
-        item_id: item.id,
-        response: responses[item.id] || null,
-        completed: responses[item.id] === 'true' || responses[item.id] === 'ok',
+        item_id: item.id || `item_${index}`,
+        response: responses[index] || null,
+        completed: responses[index] === 'true' || responses[index] === 'ok',
         completed_by: user?.id,
         completed_at: endTime.toISOString(),
       }))
 
-      const { error: respError } = await supabase
-        .from('checklist_execution_items')
-        .insert(responsesToInsert)
+      await supabase.from('checklist_execution_items').insert(responsesToInsert)
 
-      if (respError) throw respError
-
-      // Check for critical issues and create OS if needed
-      const criticalItems = items.filter(item =>
-        responses[item.id] === 'critical' || responses[item.id] === 'false'
+      // Check for critical issues
+      const criticalItems = items.filter((item, index) =>
+        responses[index] === 'critical' || responses[index] === 'false'
       )
 
       if (criticalItems.length > 0) {
-        // Generate OS number
         const { data: osNumber } = await supabase.rpc('generate_os_number')
-
-        // Create maintenance order
         await supabase.from('maintenance_orders').insert({
           os_number: osNumber || `OS-${new Date().getFullYear()}-00001`,
-          equipment_id: qrData.equipment_id,
+          equipment_id: qrData.equipment_id || null,
           type: 'corrective',
           priority: 'high',
           status: 'open',
           title: `Correção necessária - ${qrData.equipment_name}`,
-          description: `Checklist identificou problemas: ${criticalItems.map(i => i.question).join(', ')}`,
+          description: `Checklist identificou: ${criticalItems.map(i => i.question).join(', ')}`,
           requested_by: user?.id,
           sector: qrData.sector,
         })
@@ -158,124 +174,118 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       setSuccess('Checklist concluído com sucesso!')
       setTimeout(() => onComplete(), 1500)
     } catch (err: any) {
-      setError(err.message || 'Erro ao salvar checklist')
+      setError(err.message || 'Erro ao salvar')
     } finally {
       setSubmitting(false)
     }
   }
 
-  function getElapsedTime() {
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - startTime.getTime()) / 1000 / 60)
-    return `${diff} min`
-  }
-
   if (loading) {
     return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Carregando checklist...</p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="h-10 w-10 animate-spin text-[#28A745] mb-4" />
+        <p className="text-muted-foreground">Carregando checklist...</p>
+      </div>
     )
   }
+
+  const completedCount = Object.keys(responses).length
+  const progress = items.length > 0 ? (completedCount / items.length) * 100 : 0
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card>
+      <Card className="bg-gradient-to-r from-[#1A3A5A] to-[#0d4f6b] text-white">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-lg">{qrData.equipment_name}</h3>
-              <p className="text-sm text-muted-foreground">{qrData.equipment_code} • {qrData.sector}</p>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={onCancel} className="text-white hover:bg-white/10">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h3 className="font-bold">{qrData.template_name || 'Checklist'}</h3>
+                <p className="text-white/60 text-sm">{qrData.equipment_name} • {qrData.sector}</p>
+              </div>
             </div>
             <div className="text-right">
-              <StatusIndicator variant="ok" label="Em Execução" />
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {getElapsedTime()}
-              </p>
+              <div className="flex items-center gap-1 text-white/80">
+                <Clock className="h-4 w-4" />
+                <span className="font-mono text-lg">{formatTime(elapsedTime)}</span>
+              </div>
+              {gpsData && (
+                <div className="flex items-center gap-1 text-white/50 text-xs mt-1">
+                  <MapPin className="h-3 w-3" /> GPS OK
+                </div>
+              )}
             </div>
           </div>
-          {gpsData && (
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              GPS: {gpsData.lat.toFixed(6)}, {gpsData.lng.toFixed(6)} (±{gpsData.accuracy.toFixed(0)}m)
-            </p>
-          )}
+          {/* Progress bar */}
+          <div className="mt-3">
+            <div className="flex justify-between text-xs text-white/60 mb-1">
+              <span>{completedCount}/{items.length} itens</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-[#28A745] rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
       {error && (
         <Alert className="bg-[#DC3545]/10 border-[#DC3545]/30 text-[#DC3545]">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> {error}</AlertDescription>
         </Alert>
       )}
 
       {success && (
         <Alert className="bg-[#28A745]/10 border-[#28A745]/30 text-[#28A745]">
-          <AlertDescription className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            {success}
-          </AlertDescription>
+          <AlertDescription className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> {success}</AlertDescription>
         </Alert>
       )}
 
-      {/* Checklist Items */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{qrData.template_name || 'Checklist'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {items.map((item, index) => (
-              <div
-                key={item.id}
-                className={`p-3 rounded-xl border ${
-                  responses[item.id] ? 'border-[#28A745]/30 bg-[#28A745]/5' : 'border-border'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-xs text-muted-foreground mt-1 w-6">{index + 1}.</span>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{item.question}</p>
-                    {item.is_required && (
-                      <span className="text-xs text-[#DC3545]">* Obrigatório</span>
-                    )}
-                  </div>
+      {/* Items */}
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <Card key={index} className={cn(
+            'transition-all duration-200',
+            responses[index] ? 'border-[#28A745]/30 bg-[#28A745]/5' : 'border-border'
+          )}>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
+                  responses[index] ? 'bg-[#28A745] text-white' : 'bg-muted text-muted-foreground'
+                )}>
+                  {responses[index] ? '✓' : index + 1}
                 </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-1">{item.question}</p>
+                  {item.is_required && <span className="text-xs text-[#DC3545]">* Obrigatório</span>}
 
-                {/* Response Options */}
-                <div className="mt-3 ml-9">
                   {item.response_type === 'boolean' && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mt-2">
                       <Button
-                        type="button"
-                        variant={responses[item.id] === 'true' ? 'default' : 'outline'}
+                        variant={responses[index] === 'true' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => handleResponse(item.id, 'true')}
-                        className={responses[item.id] === 'true' ? 'btn-gradient-green text-white' : ''}
+                        onClick={() => handleResponse(index, 'true')}
+                        className={cn(responses[index] === 'true' ? 'bg-[#28A745] text-white' : '')}
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Sim
+                        <CheckCircle className="h-4 w-4 mr-1" /> Sim
                       </Button>
                       <Button
-                        type="button"
-                        variant={responses[item.id] === 'false' ? 'default' : 'outline'}
+                        variant={responses[index] === 'false' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => handleResponse(item.id, 'false')}
-                        className={responses[item.id] === 'false' ? 'bg-[#DC3545] text-white' : ''}
+                        onClick={() => handleResponse(index, 'false')}
+                        className={cn(responses[index] === 'false' ? 'bg-[#DC3545] text-white' : '')}
                       >
                         Não
                       </Button>
                       <Button
-                        type="button"
-                        variant={responses[item.id] === 'na' ? 'default' : 'outline'}
+                        variant={responses[index] === 'na' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => handleResponse(item.id, 'na')}
-                        className={responses[item.id] === 'na' ? 'bg-[#6C757D] text-white' : ''}
+                        onClick={() => handleResponse(index, 'na')}
+                        className={cn(responses[index] === 'na' ? 'bg-[#6C757D] text-white' : '')}
                       >
                         N/A
                       </Button>
@@ -284,11 +294,11 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
 
                   {item.response_type === 'select' && (
                     <select
-                      value={responses[item.id] || ''}
-                      onChange={(e) => handleResponse(item.id, e.target.value)}
-                      className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
+                      value={responses[index] || ''}
+                      onChange={(e) => handleResponse(index, e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
                     >
-                      <option value="">Selecione</option>
+                      <option value="">Selecione...</option>
                       <option value="ok">OK</option>
                       <option value="attention">Atenção</option>
                       <option value="critical">Crítico</option>
@@ -298,10 +308,10 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
                   {item.response_type === 'text' && (
                     <input
                       type="text"
-                      value={responses[item.id] || ''}
-                      onChange={(e) => handleResponse(item.id, e.target.value)}
+                      value={responses[index] || ''}
+                      onChange={(e) => handleResponse(index, e.target.value)}
                       placeholder="Resposta..."
-                      className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
                     />
                   )}
 
@@ -309,23 +319,23 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
                     <input
                       type="number"
                       step="0.01"
-                      value={responses[item.id] || ''}
-                      onChange={(e) => handleResponse(item.id, e.target.value)}
+                      value={responses[index] || ''}
+                      onChange={(e) => handleResponse(index, e.target.value)}
                       placeholder="0"
-                      className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
                     />
                   )}
                 </div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
       {/* Observations */}
       <Card>
         <CardContent className="p-4">
-          <Label htmlFor="observations">Observações</Label>
+          <Label htmlFor="observations" className="text-sm font-medium">Observações</Label>
           <textarea
             id="observations"
             value={observations}
@@ -337,15 +347,9 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
         </CardContent>
       </Card>
 
-      {/* Actions */}
+      {/* Submit */}
       <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={submitting}
-          className="flex-1"
-        >
+        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting} className="flex-1">
           Cancelar
         </Button>
         <Button
@@ -355,18 +359,16 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
           className="flex-1 btn-gradient-green text-white border-0"
         >
           {submitting ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Salvando...
-            </>
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</>
           ) : (
-            <>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Concluir Checklist
-            </>
+            <><CheckCircle className="h-4 w-4 mr-2" /> Concluir Checklist</>
           )}
         </Button>
       </div>
     </div>
   )
+}
+
+function cn(...classes: (string | boolean | undefined)[]) {
+  return classes.filter(Boolean).join(' ')
 }
