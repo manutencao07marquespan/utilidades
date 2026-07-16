@@ -24,7 +24,8 @@ import {
   AlertTriangle,
   History,
   Settings,
-  Cloud
+  Cloud,
+  Target
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -40,6 +41,7 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Supervisão', href: '/supervisao', icon: Target },
   { name: 'Indicadores', href: '/indicadores', icon: BarChart3 },
   { name: 'Clima', href: '/clima', icon: Cloud },
   { name: 'Histórico', href: '/historico', icon: History },
