@@ -36,6 +36,8 @@ interface ShiftStats {
 export default function SupervisaoPage() {
   const [operatorStats, setOperatorStats] = useState<OperatorStats[]>([])
   const [shiftStats, setShiftStats] = useState<ShiftStats[]>([])
+  const [allExecutions, setAllExecutions] = useState<any[]>([])
+  const [selectedShift, setSelectedShift] = useState<string>('all')
   const [stats, setStats] = useState({
     totalChecklists: 0,
     avgTime: 0,
@@ -53,6 +55,10 @@ export default function SupervisaoPage() {
     setTurnoAtual(getCurrentShift())
   }, [])
 
+  useEffect(() => {
+    filterData()
+  }, [selectedShift, allExecutions])
+
   function getCurrentShift() {
     const hour = new Date().getHours()
     if (hour >= 6 && hour < 18) return '1A'
@@ -62,7 +68,6 @@ export default function SupervisaoPage() {
   async function fetchData() {
     setLoading(true)
     try {
-      // Fetch all executions today
       const today = new Date().toISOString().split('T')[0]
       const { data: executions } = await supabase
         .from('checklist_executions')
@@ -71,109 +76,84 @@ export default function SupervisaoPage() {
         .order('started_at', { ascending: false })
 
       if (executions) {
-        // Calculate operator stats
-        const operatorMap = new Map<string, OperatorStats>()
-        executions.forEach((exec: any) => {
-          const userId = exec.user_id
-          const userName = exec.user_profiles?.full_name || 'Desconhecido'
-          const duration = exec.execution_duration ? exec.execution_duration / 60 : 0
-
-          if (!operatorMap.has(userId)) {
-            operatorMap.set(userId, {
-              name: userName,
-              userId,
-              checklistsCompleted: 0,
-              avgTimeMinutes: 0,
-              totalTimeMinutes: 0,
-              nonConformities: 0,
-              lastChecklist: null,
-            })
-          }
-
-          const stats = operatorMap.get(userId)!
-          stats.checklistsCompleted++
-          stats.totalTimeMinutes += duration
-          if (exec.has_non_conformity) stats.nonConformities++
-          if (!stats.lastChecklist || exec.started_at > stats.lastChecklist) {
-            stats.lastChecklist = exec.started_at
-          }
-        })
-
-        // Calculate averages
-        operatorMap.forEach(stats => {
-          stats.avgTimeMinutes = stats.checklistsCompleted > 0
-            ? Math.round(stats.totalTimeMinutes / stats.checklistsCompleted)
-            : 0
-        })
-
-        const operatorArray = Array.from(operatorMap.values())
-          .sort((a, b) => b.checklistsCompleted - a.checklistsCompleted)
-
-        setOperatorStats(operatorArray)
-
-        // Calculate shift stats
-        const shiftMap = new Map<string, ShiftStats>()
-        const shiftLabels: Record<string, string> = { '1A': 'Turno 1A (06h-18h)', '1B': 'Turno 1B (18h-06h)', '2A': 'Turno 2A', '2B': 'Turno 2B' }
-
-        executions.forEach((exec: any) => {
-          const execDate = new Date(exec.started_at)
-          const hour = execDate.getHours()
-          let shift = '1A'
-          if (hour >= 18 || hour < 6) shift = '1B'
-          else if (execDate.getDay() % 2 === 0) shift = '2A'
-          else shift = '2B'
-
-          if (!shiftMap.has(shift)) {
-            shiftMap.set(shift, {
-              shift,
-              label: shiftLabels[shift] || shift,
-              checklists: 0,
-              avgTime: 0,
-              operators: 0,
-              operatorIds: [] as string[],
-              nonConformities: 0,
-              efficiency: 0,
-            })
-          }
-
-          const s = shiftMap.get(shift)!
-          s.checklists++
-          if (!s.operatorIds.includes(exec.user_id)) {
-            s.operatorIds.push(exec.user_id)
-          }
-          if (exec.has_non_conformity) s.nonConformities++
-          if (exec.execution_duration) {
-            s.avgTime = (s.avgTime * (s.checklists - 1) + exec.execution_duration / 60) / s.checklists
-          }
-        })
-
-        const shiftArray = Array.from(shiftMap.values()).map(s => ({
-          ...s,
-          operators: s.operatorIds.length,
-          efficiency: Math.max(0, 100 - s.nonConformities * 5),
-        }))
-        setShiftStats(shiftArray)
-
-        // Overall stats
-        const totalTime = executions.reduce((sum: number, e: any) =>
-          sum + (e.execution_duration ? e.execution_duration / 60 : 0), 0)
-        const completedCount = executions.filter((e: any) => e.status === 'completed').length
-        const ncCount = executions.filter((e: any) => e.has_non_conformity).length
-        const uniqueOperators = new Set(executions.map((e: any) => e.user_id))
-
-        setStats({
-          totalChecklists: executions.length,
-          avgTime: completedCount > 0 ? Math.round(totalTime / completedCount) : 0,
-          totalOperators: uniqueOperators.size,
-          nonConformities: ncCount,
-          completedToday: completedCount,
-          inProgress: executions.filter((e: any) => e.status === 'in_progress').length,
-        })
+        setAllExecutions(executions)
       }
     } catch (error) {
       console.error('Error:', error)
     }
     setLoading(false)
+  }
+
+  function filterData() {
+    let filtered = allExecutions
+
+    // Filter by shift
+    if (selectedShift !== 'all') {
+      filtered = allExecutions.filter((exec: any) => {
+        const execDate = new Date(exec.started_at)
+        const hour = execDate.getHours()
+        let shift = '1A'
+        if (hour >= 18 || hour < 6) shift = '1B'
+        else if (execDate.getDay() % 2 === 0) shift = '2A'
+        else shift = '2B'
+        return shift === selectedShift
+      })
+    }
+
+    // Calculate operator stats
+    const operatorMap = new Map<string, OperatorStats>()
+    filtered.forEach((exec: any) => {
+      const userId = exec.user_id
+      const userName = exec.user_profiles?.full_name || 'Desconhecido'
+      const duration = exec.execution_duration ? exec.execution_duration / 60 : 0
+
+      if (!operatorMap.has(userId)) {
+        operatorMap.set(userId, {
+          name: userName,
+          userId,
+          checklistsCompleted: 0,
+          avgTimeMinutes: 0,
+          totalTimeMinutes: 0,
+          nonConformities: 0,
+          lastChecklist: null,
+        })
+      }
+
+      const stats = operatorMap.get(userId)!
+      stats.checklistsCompleted++
+      stats.totalTimeMinutes += duration
+      if (exec.has_non_conformity) stats.nonConformities++
+      if (!stats.lastChecklist || exec.started_at > stats.lastChecklist) {
+        stats.lastChecklist = exec.started_at
+      }
+    })
+
+    operatorMap.forEach(stats => {
+      stats.avgTimeMinutes = stats.checklistsCompleted > 0
+        ? Math.round(stats.totalTimeMinutes / stats.checklistsCompleted)
+        : 0
+    })
+
+    const operatorArray = Array.from(operatorMap.values())
+      .sort((a, b) => b.checklistsCompleted - a.checklistsCompleted)
+
+    setOperatorStats(operatorArray)
+
+    // Overall stats
+    const totalTime = filtered.reduce((sum: number, e: any) =>
+      sum + (e.execution_duration ? e.execution_duration / 60 : 0), 0)
+    const completedCount = filtered.filter((e: any) => e.status === 'completed').length
+    const ncCount = filtered.filter((e: any) => e.has_non_conformity).length
+    const uniqueOperators = new Set(filtered.map((e: any) => e.user_id))
+
+    setStats({
+      totalChecklists: filtered.length,
+      avgTime: completedCount > 0 ? Math.round(totalTime / completedCount) : 0,
+      totalOperators: uniqueOperators.size,
+      nonConformities: ncCount,
+      completedToday: completedCount,
+      inProgress: filtered.filter((e: any) => e.status === 'in_progress').length,
+    })
   }
 
   if (loading) {
@@ -195,6 +175,37 @@ export default function SupervisaoPage() {
         <span>Última atualização: {new Date().toLocaleString('pt-BR')}</span>
         <span>Turno Atual: <strong className="text-foreground">{turnoAtual}</strong></span>
       </div>
+
+      {/* Filtro de Turno */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium">Filtrar por Turno:</span>
+            <div className="flex gap-2">
+              {[
+                { value: 'all', label: 'Todos' },
+                { value: '1A', label: 'Turno 1A' },
+                { value: '1B', label: 'Turno 1B' },
+                { value: '2A', label: 'Turno 2A' },
+                { value: '2B', label: 'Turno 2B' },
+              ].map((shift) => (
+                <button
+                  key={shift.value}
+                  onClick={() => setSelectedShift(shift.value)}
+                  className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                    selectedShift === shift.value
+                      ? 'bg-[#28A745] text-white shadow-md'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  )}
+                >
+                  {shift.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Gerais */}
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
