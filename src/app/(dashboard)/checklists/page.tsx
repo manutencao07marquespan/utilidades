@@ -69,14 +69,45 @@ export default function ChecklistsPage() {
   }
 
   async function fetchRecentExecutions() {
-    const { data } = await supabase
+    // Simple query without complex joins that might fail
+    const { data, error } = await supabase
       .from('checklist_executions')
-      .select('*, assets(name), checklist_templates(name), user_profiles(full_name)')
-      .order('created_at', { ascending: false })
+      .select('*')
+      .order('started_at', { ascending: false })
       .limit(10)
 
+    if (error) {
+      console.error('Error fetching executions:', error)
+    }
+
     if (data) {
-      setRecentExecutions(data as Execution[])
+      // Enrich with template and user names
+      const enriched = await Promise.all(data.map(async (exec: any) => {
+        let templateName = 'Checklist'
+        let userName = 'Usuário'
+
+        if (exec.template_id) {
+          const { data: template } = await supabase
+            .from('checklist_templates')
+            .select('name')
+            .eq('id', exec.template_id)
+            .single()
+          if (template) templateName = template.name
+        }
+
+        if (exec.user_id) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', exec.user_id)
+            .single()
+          if (profile) userName = profile.full_name
+        }
+
+        return { ...exec, template_name: templateName, user_name: userName }
+      }))
+
+      setRecentExecutions(enriched)
     }
   }
 
@@ -194,10 +225,10 @@ export default function ChecklistsPage() {
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium">
-                          {exec.assets?.name || 'Equipamento'}
+                          {(exec as any).template_name || 'Checklist'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {exec.checklist_templates?.name || 'Checklist'} • {exec.user_profiles?.full_name || '-'}
+                          {(exec as any).user_name || '-'}
                         </p>
                       </div>
                       <div className="text-right text-xs text-muted-foreground">
