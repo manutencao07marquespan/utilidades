@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { StatusIndicator } from '@/components/shared/status-indicator'
 import { Loader2, CheckCircle, Clock, MapPin, AlertTriangle, ArrowLeft } from 'lucide-react'
 
 interface QRData {
@@ -19,7 +18,6 @@ interface QRData {
 }
 
 interface TemplateItem {
-  id?: string
   question: string
   response_type: string
   is_required: boolean
@@ -60,7 +58,6 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       return
     }
 
-    // First try to get items from the template's JSONB column
     const { data: template } = await supabase
       .from('checklist_templates')
       .select('items')
@@ -69,19 +66,6 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
 
     if (template?.items && Array.isArray(template.items)) {
       setItems(template.items)
-      setLoading(false)
-      return
-    }
-
-    // Fallback to separate items table
-    const { data } = await supabase
-      .from('checklist_template_items')
-      .select('*')
-      .eq('template_id', qrData.template_id)
-      .order('order_index')
-
-    if (data) {
-      setItems(data as TemplateItem[])
     }
     setLoading(false)
   }
@@ -89,13 +73,7 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
   function requestGeolocation() {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setGpsData({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-          })
-        },
+        (pos) => setGpsData({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
         () => {}
       )
     }
@@ -119,11 +97,11 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       const user = (await supabase.auth.getUser()).data.user
       const endTime = new Date()
 
-      // Create execution record
+      // Create execution - using simple fields only
       const { data: execution, error: execError } = await supabase
         .from('checklist_executions')
         .insert({
-          template_id: qrData.template_id || null,
+          template_id: qrData.template_id,
           equipment_id: qrData.equipment_id || null,
           user_id: user?.id,
           started_at: startTime.toISOString(),
@@ -137,39 +115,21 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
         .select()
         .single()
 
-      if (execError) throw execError
-
-      // Save responses
-      const responsesToInsert = items.map((item, index) => ({
-        execution_id: execution.id,
-        item_id: item.id || `item_${index}`,
-        response: responses[index] || null,
-        completed: responses[index] === 'true' || responses[index] === 'ok',
-        completed_by: user?.id,
-        completed_at: endTime.toISOString(),
-      }))
-
-      await supabase.from('checklist_execution_items').insert(responsesToInsert)
-
-      // Check for critical issues
-      const criticalItems = items.filter((item, index) =>
-        responses[index] === 'critical' || responses[index] === 'false'
-      )
-
-      if (criticalItems.length > 0) {
-        const { data: osNumber } = await supabase.rpc('generate_os_number')
-        await supabase.from('maintenance_orders').insert({
-          os_number: osNumber || `OS-${new Date().getFullYear()}-00001`,
-          equipment_id: qrData.equipment_id || null,
-          type: 'corrective',
-          priority: 'high',
-          status: 'open',
-          title: `Correção necessária - ${qrData.equipment_name}`,
-          description: `Checklist identificou: ${criticalItems.map(i => i.question).join(', ')}`,
-          requested_by: user?.id,
-          sector: qrData.sector,
-        })
+      if (execError) {
+        console.error('Execution error:', execError)
+        throw new Error('Erro ao salvar execução: ' + execError.message)
       }
+
+      // Save responses as observations text (simpler approach)
+      const responseText = items.map((item, index) => {
+        const response = responses[index] || 'Não respondido'
+        return `${index + 1}. ${item.question}: ${response}`
+      }).join('\n')
+
+      await supabase
+        .from('checklist_executions')
+        .update({ observations: (observations ? observations + '\n\n' : '') + responseText })
+        .eq('id', execution.id)
 
       setSuccess('Checklist concluído com sucesso!')
       setTimeout(() => onComplete(), 1500)
@@ -219,7 +179,6 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
               )}
             </div>
           </div>
-          {/* Progress bar */}
           <div className="mt-3">
             <div className="flex justify-between text-xs text-white/60 mb-1">
               <span>{completedCount}/{items.length} itens</span>
@@ -265,39 +224,27 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
 
                   {item.response_type === 'boolean' && (
                     <div className="flex gap-2 mt-2">
-                      <Button
-                        variant={responses[index] === 'true' ? 'default' : 'outline'}
-                        size="sm"
+                      <Button variant={responses[index] === 'true' ? 'default' : 'outline'} size="sm"
                         onClick={() => handleResponse(index, 'true')}
-                        className={cn(responses[index] === 'true' ? 'bg-[#28A745] text-white' : '')}
-                      >
+                        className={cn(responses[index] === 'true' ? 'bg-[#28A745] text-white' : '')}>
                         <CheckCircle className="h-4 w-4 mr-1" /> Sim
                       </Button>
-                      <Button
-                        variant={responses[index] === 'false' ? 'default' : 'outline'}
-                        size="sm"
+                      <Button variant={responses[index] === 'false' ? 'default' : 'outline'} size="sm"
                         onClick={() => handleResponse(index, 'false')}
-                        className={cn(responses[index] === 'false' ? 'bg-[#DC3545] text-white' : '')}
-                      >
+                        className={cn(responses[index] === 'false' ? 'bg-[#DC3545] text-white' : '')}>
                         Não
                       </Button>
-                      <Button
-                        variant={responses[index] === 'na' ? 'default' : 'outline'}
-                        size="sm"
+                      <Button variant={responses[index] === 'na' ? 'default' : 'outline'} size="sm"
                         onClick={() => handleResponse(index, 'na')}
-                        className={cn(responses[index] === 'na' ? 'bg-[#6C757D] text-white' : '')}
-                      >
+                        className={cn(responses[index] === 'na' ? 'bg-[#6C757D] text-white' : '')}>
                         N/A
                       </Button>
                     </div>
                   )}
 
                   {item.response_type === 'select' && (
-                    <select
-                      value={responses[index] || ''}
-                      onChange={(e) => handleResponse(index, e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
-                    >
+                    <select value={responses[index] || ''} onChange={(e) => handleResponse(index, e.target.value)}
+                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2">
                       <option value="">Selecione...</option>
                       <option value="ok">OK</option>
                       <option value="attention">Atenção</option>
@@ -305,25 +252,14 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
                     </select>
                   )}
 
-                  {item.response_type === 'text' && (
-                    <input
-                      type="text"
-                      value={responses[index] || ''}
-                      onChange={(e) => handleResponse(index, e.target.value)}
-                      placeholder="Resposta..."
-                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
-                    />
+                  {(item.response_type === 'text') && (
+                    <input type="text" value={responses[index] || ''} onChange={(e) => handleResponse(index, e.target.value)}
+                      placeholder="Resposta..." className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2" />
                   )}
 
                   {item.response_type === 'number' && (
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={responses[index] || ''}
-                      onChange={(e) => handleResponse(index, e.target.value)}
-                      placeholder="0"
-                      className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2"
-                    />
+                    <input type="number" step="0.01" value={responses[index] || ''} onChange={(e) => handleResponse(index, e.target.value)}
+                      placeholder="0" className="w-full h-9 px-3 rounded-lg border border-input bg-transparent text-sm mt-2" />
                   )}
                 </div>
               </div>
@@ -336,33 +272,17 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       <Card>
         <CardContent className="p-4">
           <Label htmlFor="observations" className="text-sm font-medium">Observações</Label>
-          <textarea
-            id="observations"
-            value={observations}
-            onChange={(e) => setObservations(e.target.value)}
-            placeholder="Observações adicionais..."
-            rows={3}
-            className="w-full mt-2 px-3 py-2 rounded-xl border border-input bg-transparent text-sm resize-none"
-          />
+          <textarea id="observations" value={observations} onChange={(e) => setObservations(e.target.value)}
+            placeholder="Observações adicionais..." rows={3}
+            className="w-full mt-2 px-3 py-2 rounded-xl border border-input bg-transparent text-sm resize-none" />
         </CardContent>
       </Card>
 
       {/* Submit */}
       <div className="flex gap-3">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting} className="flex-1">
-          Cancelar
-        </Button>
-        <Button
-          type="button"
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="flex-1 btn-gradient-green text-white border-0"
-        >
-          {submitting ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</>
-          ) : (
-            <><CheckCircle className="h-4 w-4 mr-2" /> Concluir Checklist</>
-          )}
+        <Button type="button" variant="outline" onClick={onCancel} disabled={submitting} className="flex-1">Cancelar</Button>
+        <Button type="button" onClick={handleSubmit} disabled={submitting} className="flex-1 btn-gradient-green text-white border-0">
+          {submitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : <><CheckCircle className="h-4 w-4 mr-2" /> Concluir</>}
         </Button>
       </div>
     </div>

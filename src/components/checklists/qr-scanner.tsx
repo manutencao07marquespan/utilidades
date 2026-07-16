@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ScanLine, Search, CheckCircle, XCircle, Camera, CameraOff, Vibrate, ClipboardCheck } from 'lucide-react'
+import { ScanLine, Search, CheckCircle, XCircle, Camera, CameraOff, Vibrate } from 'lucide-react'
+import { Html5Qrcode } from 'html5-qrcode'
 
 interface QRData {
   equipment_id: string
@@ -29,12 +30,15 @@ export function QRScanner({ onScan }: QRScannerProps) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [templates, setTemplates] = useState<any[]>([])
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [selectedEquipment, setSelectedEquipment] = useState('')
+  const [equipmentList, setEquipmentList] = useState<any[]>([])
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
     fetchTemplates()
+    fetchEquipment()
     return () => stopCamera()
   }, [])
 
@@ -47,19 +51,28 @@ export function QRScanner({ onScan }: QRScannerProps) {
     if (data) setTemplates(data)
   }
 
+  async function fetchEquipment() {
+    const { data } = await supabase
+      .from('assets')
+      .select('id, name, asset_code, location')
+      .eq('is_active', true)
+      .order('name')
+    if (data) setEquipmentList(data)
+  }
+
   function playBeep() {
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      oscillator.frequency.value = 1200
-      oscillator.type = 'sine'
-      gainNode.gain.value = 0.3
-      oscillator.start()
-      oscillator.stop(audioContext.currentTime + 0.15)
-    } catch (e) { console.log('Audio not supported') }
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = 1200
+      osc.type = 'sine'
+      gain.gain.value = 0.3
+      osc.start()
+      osc.stop(ctx.currentTime + 0.15)
+    } catch (e) { }
   }
 
   function vibrate() {
@@ -69,45 +82,38 @@ export function QRScanner({ onScan }: QRScannerProps) {
   async function startCamera() {
     try {
       setError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-        streamRef.current = stream
-        setCameraActive(true)
-        startQRDetection()
-      }
-    } catch (err) {
-      setError('Não foi possível acessar a câmera. Verifique as permissões.')
+      const scanner = new Html5Qrcode('qr-reader')
+      scannerRef.current = scanner
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          vibrate()
+          playBeep()
+          handleScanResult(decodedText)
+          stopCamera()
+        },
+        () => {}
+      )
+      setCameraActive(true)
+    } catch (err: any) {
+      console.error('Camera error:', err)
+      setError('Não foi possível acessar a câmera: ' + (err.message || 'Erro desconhecido'))
     }
   }
 
   function stopCamera() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {})
+      scannerRef.current.clear()
+      scannerRef.current = null
     }
-    if (videoRef.current) videoRef.current.srcObject = null
     setCameraActive(false)
-  }
-
-  function startQRDetection() {
-    if ('BarcodeDetector' in window) {
-      const barcodeDetector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
-      const detectLoop = async () => {
-        if (!videoRef.current || !cameraActive) return
-        try {
-          const barcodes = await barcodeDetector.detect(videoRef.current)
-          if (barcodes.length > 0) {
-            handleScanResult(barcodes[0].rawValue)
-          }
-        } catch (e) { }
-        if (cameraActive) requestAnimationFrame(detectLoop)
-      }
-      detectLoop()
-    }
   }
 
   async function handleScanResult(code: string) {
@@ -115,27 +121,24 @@ export function QRScanner({ onScan }: QRScannerProps) {
     setScanning(true)
     setError(null)
     setSuccess(null)
-    vibrate()
-    playBeep()
 
     try {
-      // Check if it's a checklist QR code (format: checklist:uuid)
-      if (code.startsWith('checklist:')) {
-        const templateId = code.replace('checklist:', '')
-        const { data: template, error: templateError } = await supabase
+      // Check if it's a checklist QR (format: checklist:uuid)
+      if (code.includes('checklist:') || code.includes('/checklists/scan/')) {
+        const templateId = code.replace('checklist:', '').replace('https://portalutilidades.com/checklists/scan/', '')
+        const { data: template, error: tErr } = await supabase
           .from('checklist_templates')
           .select('id, name, category, sector')
-          .eq('id', templateId)
+          .eq('id', templateId.trim())
           .single()
 
-        if (templateError || !template) {
-          setError('Modelo de checklist não encontrado')
+        if (tErr || !template) {
+          setError('Checklist não encontrado')
           setScanning(false)
           return
         }
 
         setSuccess(`Checklist: ${template.name}`)
-
         setTimeout(() => {
           onScan({
             equipment_id: '',
@@ -146,77 +149,72 @@ export function QRScanner({ onScan }: QRScannerProps) {
             template_name: template.name,
           })
           setScanning(false)
-        }, 1000)
+        }, 800)
         return
       }
 
-      // Otherwise, search for equipment QR code
-      const { data: qrData, error: qrError } = await supabase
+      // Equipment QR
+      const { data: qrData, error: qrErr } = await supabase
         .from('equipment_qrcodes')
         .select('*, assets(name, asset_code, location)')
         .eq('qr_code', code.trim())
         .eq('status', 'active')
         .single()
 
-      if (qrError || !qrData) {
-        setError('QR Code não encontrado. Tente o código manual.')
+      if (qrErr || !qrData) {
+        setError('QR Code não encontrado: ' + code)
         setScanning(false)
         return
       }
 
-      const { data: templateData } = await supabase
-        .from('checklist_templates')
-        .select('id, name')
-        .eq('is_active', true)
-        .limit(1)
-        .single()
-
-      setSuccess(`Equipamento: ${qrData.assets?.name || 'Desconhecido'}`)
-
+      setSuccess(`Equipamento: ${qrData.assets?.name || code}`)
       setTimeout(() => {
         onScan({
           equipment_id: qrData.equipment_id,
           equipment_name: qrData.assets?.name || 'Desconhecido',
           equipment_code: qrData.assets?.asset_code || code,
           sector: qrData.sector || qrData.assets?.location || '-',
-          template_id: templateData?.id || '',
-          template_name: templateData?.name || 'Checklist Padrão',
+          template_id: selectedTemplate || '',
+          template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Checklist',
         })
         setScanning(false)
-      }, 1000)
+      }, 800)
     } catch (err: any) {
-      setError(err.message || 'Erro ao escanear')
+      setError('Erro ao processar: ' + err.message)
       setScanning(false)
     }
   }
 
-  async function handleTemplateSelect(templateId: string) {
-    if (!templateId) return
-    const template = templates.find(t => t.id === templateId)
-    if (!template) return
-
+  function handleManualStart() {
+    if (!selectedTemplate) {
+      setError('Selecione um checklist')
+      return
+    }
     vibrate()
     playBeep()
-    setSuccess(`Checklist: ${template.name}`)
+    const template = templates.find(t => t.id === selectedTemplate)
+    const equipment = equipmentList.find(e => e.id === selectedEquipment)
+    setSuccess(`Iniciando: ${template?.name}`)
 
     setTimeout(() => {
       onScan({
-        equipment_id: '',
-        equipment_name: template.name,
-        equipment_code: template.id.substring(0, 8).toUpperCase(),
-        sector: template.sector || '-',
-        template_id: template.id,
-        template_name: template.name,
+        equipment_id: selectedEquipment || '',
+        equipment_name: equipment?.name || template?.name || 'Checklist',
+        equipment_code: equipment?.asset_code || template?.id?.substring(0, 8).toUpperCase() || '',
+        sector: equipment?.location || template?.sector || '-',
+        template_id: selectedTemplate,
+        template_name: template?.name || 'Checklist',
       })
-    }, 800)
+    }, 500)
   }
 
-  async function handleManualScan() {
-    if (!manualCode.trim()) {
-      setError('Digite o código')
-      return
-    }
-    await handleScanResult(manualCode)
+  const categoryLabels: Record<string, string> = {
+    daily: 'Diário',
+    weekly: 'Semanal',
+    monthly: 'Mensal',
+    lubrication: 'Lubrificação',
+    inspection: 'Inspeção',
+    custom: 'Personalizado',
   }
 
   return (
@@ -236,7 +234,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
         </Alert>
       )}
 
-      {/* Camera */}
+      {/* Camera Scanner */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -245,66 +243,93 @@ export function QRScanner({ onScan }: QRScannerProps) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="relative rounded-xl overflow-hidden border-2 border-muted-foreground/20 bg-black">
-            <video ref={videoRef} className="w-full h-64 object-cover" playsInline muted autoPlay />
-            {!cameraActive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-                <Camera className="h-16 w-16 text-white/30 mb-4" />
-                <p className="text-sm text-white/50 mb-4">Toque para ativar a câmera</p>
-                <Button type="button" onClick={startCamera} className="btn-gradient-green text-white border-0">
-                  <Camera className="h-4 w-4 mr-2" /> Ativar Câmera
-                </Button>
-              </div>
-            )}
-            {cameraActive && (
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48">
-                  <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-[#28A745]"></div>
-                  <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-[#28A745]"></div>
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-[#28A745]"></div>
-                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-[#28A745]"></div>
-                </div>
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between pointer-events-auto">
-                  <Button type="button" variant="secondary" size="sm" onClick={stopCamera}>
-                    <CameraOff className="h-4 w-4 mr-1" /> Fechar
-                  </Button>
-                  <div className="flex items-center gap-2 text-white text-xs bg-black/50 px-3 py-1 rounded-full">
-                    <Vibrate className="h-3 w-3" /> Vibração
-                  </div>
-                </div>
-              </div>
+          <div id="qr-reader" className="w-full rounded-xl overflow-hidden" />
+          <div className="mt-3 flex justify-center">
+            {!cameraActive ? (
+              <Button type="button" onClick={startCamera} className="btn-gradient-green text-white border-0">
+                <Camera className="h-4 w-4 mr-2" /> Ativar Câmera
+              </Button>
+            ) : (
+              <Button type="button" onClick={stopCamera} variant="outline">
+                <CameraOff className="h-4 w-4 mr-2" /> Fechar Câmera
+              </Button>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Manual Input */}
+      {/* Manual Selection */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="space-y-3">
-            <Label>Ou selecione um checklist</Label>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Search className="h-4 w-4 text-[#28A745]" />
+            Selecionar Checklist
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Checklist *</Label>
             <select
-              onChange={(e) => handleTemplateSelect(e.target.value)}
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
               className="w-full h-11 px-3 rounded-xl border border-input bg-transparent text-sm"
-              value=""
             >
               <option value="">Selecione o checklist...</option>
               {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                <option key={t.id} value={t.id}>
+                  {t.name} — {categoryLabels[t.category] || t.category}
+                </option>
               ))}
             </select>
           </div>
-          <div className="space-y-2 mt-4">
-            <Label>Ou digite o código</Label>
+
+          <div className="space-y-2">
+            <Label>Equipamento (opcional)</Label>
+            <select
+              value={selectedEquipment}
+              onChange={(e) => setSelectedEquipment(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border border-input bg-transparent text-sm"
+            >
+              <option value="">Nenhum equipamento</option>
+              {equipmentList.map(eq => (
+                <option key={eq.id} value={eq.id}>
+                  {eq.asset_code} — {eq.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Button
+            type="button"
+            onClick={handleManualStart}
+            disabled={!selectedTemplate}
+            className="w-full btn-gradient-green text-white border-0 h-11"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Iniciar Checklist
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Manual Code Input */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="space-y-2">
+            <Label>Ou digite o código QR</Label>
             <div className="flex gap-2">
               <Input
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Código do checklist ou equipamento"
-                onKeyDown={(e) => e.key === 'Enter' && handleManualScan()}
+                placeholder="Cole o código do QR Code"
+                onKeyDown={(e) => e.key === 'Enter' && handleScanResult(manualCode)}
               />
-              <Button type="button" onClick={handleManualScan} disabled={scanning || !manualCode.trim()} className="btn-gradient-green text-white border-0">
-                {scanning ? <span className="animate-spin">⟳</span> : <Search className="h-4 w-4" />}
+              <Button
+                type="button"
+                onClick={() => handleScanResult(manualCode)}
+                disabled={!manualCode.trim()}
+                className="btn-gradient-green text-white border-0"
+              >
+                <Search className="h-4 w-4" />
               </Button>
             </div>
           </div>
