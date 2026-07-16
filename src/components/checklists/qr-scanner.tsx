@@ -132,38 +132,67 @@ export function QRScanner({ onScan }: QRScannerProps) {
     setSuccess(null)
 
     try {
-      // Check if it's a checklist QR (format: CHECKLIST_xxx)
+      // Check if it's a checklist QR (format: CHECKLIST_xxx or CHECKLIST_uuid)
       if (code.startsWith('CHECKLIST_')) {
-        const { data: template, error: tErr } = await supabase
+        // Try by qr_code_data field
+        const { data: template1 } = await supabase
           .from('checklist_templates')
           .select('id, name, category, sector')
           .eq('qr_code_data', code.trim())
           .single()
 
-        if (!tErr && template) {
-          setSuccess(`Checklist: ${template.name}`)
+        if (template1) {
+          setSuccess(`Checklist: ${template1.name}`)
           setTimeout(() => {
             onScan({
               equipment_id: '',
-              equipment_name: template.name,
-              equipment_code: template.id.substring(0, 8).toUpperCase(),
-              sector: template.sector || '-',
-              template_id: template.id,
-              template_name: template.name,
+              equipment_name: template1.name,
+              equipment_code: template1.id.substring(0, 8).toUpperCase(),
+              sector: template1.sector || '-',
+              template_id: template1.id,
+              template_name: template1.name,
             })
             setScanning(false)
           }, 800)
           return
         }
 
-        // Try all templates
+        // Try by ID (format: CHECKLIST_uuid)
+        const possibleId = code.replace('CHECKLIST_', '')
+        if (possibleId.length >= 36) {
+          const { data: template2 } = await supabase
+            .from('checklist_templates')
+            .select('id, name, category, sector')
+            .eq('id', possibleId)
+            .single()
+
+          if (template2) {
+            setSuccess(`Checklist: ${template2.name}`)
+            setTimeout(() => {
+              onScan({
+                equipment_id: '',
+                equipment_name: template2.name,
+                equipment_code: template2.id.substring(0, 8).toUpperCase(),
+                sector: template2.sector || '-',
+                template_id: template2.id,
+                template_name: template2.name,
+              })
+              setScanning(false)
+            }, 800)
+            return
+          }
+        }
+
+        // Try all templates - match by partial code
         const { data: allTemplates } = await supabase
           .from('checklist_templates')
           .select('id, name, category, sector, qr_code_data')
           .eq('is_active', true)
 
         const match = allTemplates?.find((t: any) =>
-          t.qr_code_data === code || code.includes(t.id)
+          t.qr_code_data === code ||
+          code.includes(t.id) ||
+          (t.qr_code_data && code.includes(t.qr_code_data))
         )
 
         if (match) {
@@ -207,7 +236,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
         return
       }
 
-      setError('QR Code não reconhecido')
+      setError('QR Code não reconhecido. Use a lista abaixo para selecionar.')
       setScanning(false)
     } catch (err: any) {
       setError('Erro: ' + err.message)
