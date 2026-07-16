@@ -195,7 +195,7 @@ export function TemplatesList({ onRefresh }: TemplatesListProps) {
         <div class="header">
           <div class="title">PORTAL DE UTILIDADES</div>
           <div class="title">${selectedTemplate.name}</div>
-          <div class="subtitle">Categoria: ${selectedTemplate.category} | Periodicidade: ${selectedTemplate.periodicity}</div>
+          <div class="subtitle">Categoria: ${getCategoryLabel(selectedTemplate.category)} | Periodicidade: ${getPeriodicityLabel(selectedTemplate.periodicity)}</div>
           ${selectedTemplate.sector ? `<div class="subtitle">Setor: ${selectedTemplate.sector}</div>` : ''}
           <div class="qr">
             <img src="${qrUrl}" alt="QR Code" />
