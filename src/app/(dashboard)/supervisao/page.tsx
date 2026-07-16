@@ -40,6 +40,8 @@ export default function SupervisaoPage() {
   const [shiftStats, setShiftStats] = useState<ShiftStats[]>([])
   const [allExecutions, setAllExecutions] = useState<any[]>([])
   const [selectedShift, setSelectedShift] = useState<string>('all')
+  const [dateStart, setDateStart] = useState(new Date().toISOString().split('T')[0])
+  const [dateEnd, setDateEnd] = useState(new Date().toISOString().split('T')[0])
   const [stats, setStats] = useState({
     totalChecklists: 0,
     avgTime: 0,
@@ -55,7 +57,7 @@ export default function SupervisaoPage() {
   useEffect(() => {
     fetchData()
     setTurnoAtual(getCurrentShift())
-  }, [])
+  }, [dateStart, dateEnd])
 
   useEffect(() => {
     filterData()
@@ -70,11 +72,11 @@ export default function SupervisaoPage() {
   async function fetchData() {
     setLoading(true)
     try {
-      const today = new Date().toISOString().split('T')[0]
       const { data: executions } = await supabase
         .from('checklist_executions')
         .select('*, user_profiles(full_name)')
-        .gte('started_at', today)
+        .gte('started_at', dateStart)
+        .lte('started_at', dateEnd + 'T23:59:59')
         .order('started_at', { ascending: false })
 
       if (executions) {
@@ -180,32 +182,87 @@ export default function SupervisaoPage() {
         <span>Turno Atual: <strong className="text-foreground">{turnoAtual}</strong></span>
       </div>
 
-      {/* Filtro de Turno */}
+      {/* Filtros */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium">Filtrar por Turno:</span>
-            <div className="flex gap-2">
-              {[
-                { value: 'all', label: 'Todos' },
-                { value: '1A', label: 'Turno 1A' },
-                { value: '1B', label: 'Turno 1B' },
-                { value: '2A', label: 'Turno 2A' },
-                { value: '2B', label: 'Turno 2B' },
-              ].map((shift) => (
-                <button
-                  key={shift.value}
-                  onClick={() => setSelectedShift(shift.value)}
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                    selectedShift === shift.value
-                      ? 'bg-[#28A745] text-white shadow-md'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {shift.label}
-                </button>
-              ))}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Date filters */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Período:</span>
+              <input
+                type="date"
+                value={dateStart}
+                onChange={(e) => setDateStart(e.target.value)}
+                className="h-9 px-3 rounded-lg border border-input bg-transparent text-sm"
+              />
+              <span className="text-muted-foreground">até</span>
+              <input
+                type="date"
+                value={dateEnd}
+                onChange={(e) => setDateEnd(e.target.value)}
+                className="h-9 px-3 rounded-lg border border-input bg-transparent text-sm"
+              />
+              <button
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0]
+                  setDateStart(today)
+                  setDateEnd(today)
+                }}
+                className="h-9 px-3 rounded-lg border border-input bg-transparent text-sm hover:bg-muted"
+              >
+                Hoje
+              </button>
+              <button
+                onClick={() => {
+                  const end = new Date()
+                  const start = new Date()
+                  start.setDate(start.getDate() - 7)
+                  setDateStart(start.toISOString().split('T')[0])
+                  setDateEnd(end.toISOString().split('T')[0])
+                }}
+                className="h-9 px-3 rounded-lg border border-input bg-transparent text-sm hover:bg-muted"
+              >
+                7 dias
+              </button>
+              <button
+                onClick={() => {
+                  const end = new Date()
+                  const start = new Date()
+                  start.setMonth(start.getMonth() - 1)
+                  setDateStart(start.toISOString().split('T')[0])
+                  setDateEnd(end.toISOString().split('T')[0])
+                }}
+                className="h-9 px-3 rounded-lg border border-input bg-transparent text-sm hover:bg-muted"
+              >
+                Mês
+              </button>
+            </div>
+
+            {/* Shift filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Turno:</span>
+              <div className="flex gap-1">
+                {[
+                  { value: 'all', label: 'Todos' },
+                  { value: '1A', label: '1A' },
+                  { value: '1B', label: '1B' },
+                  { value: '2A', label: '2A' },
+                  { value: '2B', label: '2B' },
+                ].map((shift) => (
+                  <button
+                    key={shift.value}
+                    onClick={() => setSelectedShift(shift.value)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                      selectedShift === shift.value
+                        ? 'bg-[#28A745] text-white shadow-md'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    )}
+                  >
+                    {shift.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardContent>
