@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/shared/page-header'
 import { StatsCard } from '@/components/shared/stats-card'
 import { TemplateForm } from '@/components/checklists/template-form'
+import { TemplatesList } from '@/components/checklists/templates-list'
 import { QRScanner } from '@/components/checklists/qr-scanner'
 import { ChecklistExecution } from '@/components/checklists/checklist-execution'
 import { ClipboardCheck, CheckCircle, Clock, AlertTriangle, QrCode, Plus, Play } from 'lucide-react'
@@ -163,6 +164,7 @@ export default function ChecklistsPage() {
         </TabsContent>
 
         <TabsContent value="templates" className="space-y-6">
+          <TemplatesList key={`list-${refreshKey}`} onRefresh={() => setRefreshKey(k => k + 1)} />
           <TemplateForm onSuccess={() => setRefreshKey(k => k + 1)} />
         </TabsContent>
 
