@@ -1,0 +1,19 @@
+{
+  "name": "Portal de Utilidades",
+  "short_name": "Portal Utilidades",
+  "description": "Sistema de Controle para ETE - Portal de Utilidades",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f2942",
+  "theme_color": "#28A745",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["business", "utilities"],
+  "lang": "pt-BR"
+}
