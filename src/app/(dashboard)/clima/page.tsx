@@ -393,6 +393,59 @@ export default function ClimaPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Radar de Chuva - Gráfico de Barras */}
+      {forecast.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <CloudRain className="h-4 w-4 text-[#00b4d8]" />
+              Radar de Chuva - Próximas Horas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-2 h-48">
+              {forecast.map((hour, i) => {
+                const maxPrecip = Math.max(...forecast.map(h => h.precipitation), 1)
+                const barHeight = (hour.precipitation / maxPrecip) * 100
+                const hasRain = hour.precipitation > 0
+
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
+                    {/* Precipitation value */}
+                    {hasRain && (
+                      <span className="text-xs font-medium text-[#00b4d8] mb-1">
+                        {hour.precipitation.toFixed(1)}
+                      </span>
+                    )}
+
+                    {/* Bar */}
+                    <div className={cn(
+                      'w-full rounded-t-lg transition-all duration-500 min-h-[4px]',
+                      hasRain
+                        ? 'bg-gradient-to-t from-[#00b4d8] to-[#0096c7]'
+                        : 'bg-muted/30'
+                    )} style={{ height: hasRain ? `${Math.max(barHeight, 5)}%` : '4px' }} />
+
+                    {/* Time label */}
+                    <span className="text-[10px] text-muted-foreground mt-2">
+                      {i === 0 ? 'Agora' : hour.time}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center justify-between mt-4 pt-3 border-t text-xs text-muted-foreground">
+              <span> Precipitação (mm)</span>
+              <span>
+                Total previsto: {forecast.reduce((sum, h) => sum + h.precipitation, 0).toFixed(1)} mm
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
