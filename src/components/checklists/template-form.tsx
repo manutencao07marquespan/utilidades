@@ -94,6 +94,7 @@ export function TemplateForm({ onSuccess }: TemplateFormProps) {
         .from('checklist_templates')
         .insert({
           name: formData.name,
+          type: 'daily',
           description: formData.description || null,
           category: formData.category,
           periodicity: formData.periodicity,
