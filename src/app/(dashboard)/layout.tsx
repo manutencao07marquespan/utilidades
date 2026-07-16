@@ -22,7 +22,8 @@ import {
   Droplets,
   BarChart3,
   AlertTriangle,
-  History
+  History,
+  Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -50,6 +51,7 @@ const navigation = [
   { name: 'Relatórios', href: '/relatorios', icon: FileText },
   { name: 'Alertas', href: '/alertas', icon: AlertTriangle },
   { name: 'Usuários', href: '/usuarios', icon: Users },
+  { name: 'Configurações', href: '/configuracoes', icon: Settings },
 ]
 
 export default function DashboardLayout({
