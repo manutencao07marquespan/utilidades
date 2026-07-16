@@ -1,6 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="32" fill="#0f2942"/>
-  <circle cx="96" cy="76" r="40" fill="none" stroke="#28A745" stroke-width="8"/>
-  <path d="M96 56 L96 96 M86 76 L106 76" stroke="#28A745" stroke-width="6" stroke-linecap="round"/>
-  <text x="96" y="140" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="bold">PU</text>
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f2942"/>
+      <stop offset="100%" style="stop-color:#1A3A5A"/>
+    </linearGradient>
+    <linearGradient id="waterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00b4d8"/>
+      <stop offset="100%" style="stop-color:#0096c7"/>
+    </linearGradient>
+    <linearGradient id="dropGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#28A745"/>
+      <stop offset="100%" style="stop-color:#218838"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="192" height="192" rx="32" fill="url(#bgGrad)"/>
+  
+  <!-- Water drops pattern -->
+  <circle cx="40" cy="40" r="20" fill="#00b4d8" opacity="0.15"/>
+  <circle cx="152" cy="152" r="25" fill="#28A745" opacity="0.15"/>
+  
+  <!-- Main water drop -->
+  <path d="M96 30 C96 30 60 80 60 110 C60 130 75 145 96 145 C117 145 132 130 132 110 C132 80 96 30 96 30 Z" 
+        fill="url(#dropGrad)" stroke="#28A745" stroke-width="3"/>
+  
+  <!-- Wave inside drop -->
+  <path d="M68 105 Q82 95 96 105 Q110 115 124 105" 
+        fill="none" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  
+  <!-- Gear/wheel symbol -->
+  <circle cx="96" cy="115" r="12" fill="none" stroke="white" stroke-width="2" opacity="0.6"/>
+  <circle cx="96" cy="115" r="6" fill="white" opacity="0.4"/>
+  
+  <!-- Text PU -->
+  <text x="96" y="175" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="20" font-weight="bold" opacity="0.9">PU</text>
 </svg>
