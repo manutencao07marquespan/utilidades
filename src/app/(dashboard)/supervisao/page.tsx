@@ -11,6 +11,7 @@ import {
   TrendingUp, TrendingDown, Timer, Target, BarChart3, UserCheck
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { OperatorProductivity } from '@/components/supervisao/operator-productivity'
 
 interface OperatorStats {
   name: string
@@ -19,6 +20,7 @@ interface OperatorStats {
   avgTimeMinutes: number
   totalTimeMinutes: number
   nonConformities: number
+  efficiency: number
   lastChecklist: string | null
 }
 
@@ -115,6 +117,7 @@ export default function SupervisaoPage() {
           avgTimeMinutes: 0,
           totalTimeMinutes: 0,
           nonConformities: 0,
+          efficiency: 100,
           lastChecklist: null,
         })
       }
@@ -132,6 +135,7 @@ export default function SupervisaoPage() {
       stats.avgTimeMinutes = stats.checklistsCompleted > 0
         ? Math.round(stats.totalTimeMinutes / stats.checklistsCompleted)
         : 0
+      stats.efficiency = Math.max(0, Math.min(100, 100 - (stats.nonConformities * 10)))
     })
 
     const operatorArray = Array.from(operatorMap.values())
@@ -413,6 +417,9 @@ export default function SupervisaoPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Relatório de Produtividade por Operador */}
+      <OperatorProductivity operators={operatorStats} />
     </div>
   )
 }
