@@ -56,7 +56,16 @@ export function ExecutionDetail({ executionId, onBack }: ExecutionDetailProps) {
   }
 
   function formatTime(seconds: number) {
-    if (!seconds) return '-'
+    if (!seconds) {
+      // Try to calculate from started_at and finished_at
+      if (execution?.started_at && execution?.finished_at) {
+        const start = new Date(execution.started_at).getTime()
+        const end = new Date(execution.finished_at).getTime()
+        seconds = Math.floor((end - start) / 1000)
+      } else {
+        return '-'
+      }
+    }
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins}min ${secs}s`
@@ -72,16 +81,38 @@ export function ExecutionDetail({ executionId, onBack }: ExecutionDetailProps) {
     if (!observations) return []
     const lines = observations.split('\n').filter(l => l.trim())
     return lines.map(line => {
+      // Match patterns like "1. Question: Response" or "1. Question: Sim"
       const match = line.match(/^(\d+)\.\s*(.+?):\s*(.+)$/)
       if (match) {
         return {
           index: parseInt(match[1]),
-          question: match[2],
-          response: match[3],
+          question: match[2].trim(),
+          response: translateResponse(match[3].trim()),
+        }
+      }
+      // Also match "1. Question" without response
+      const matchNoResponse = line.match(/^(\d+)\.\s*(.+)$/)
+      if (matchNoResponse) {
+        return {
+          index: parseInt(matchNoResponse[1]),
+          question: matchNoResponse[2].trim(),
+          response: 'Não respondido',
         }
       }
       return null
     }).filter(Boolean)
+  }
+
+  function translateResponse(response: string) {
+    const translations: Record<string, string> = {
+      'true': 'Sim',
+      'false': 'Não',
+      'na': 'Não se aplica',
+      'ok': 'OK',
+      'attention': 'Atenção',
+      'critical': 'Crítico',
+    }
+    return translations[response] || response
   }
 
   if (loading) {

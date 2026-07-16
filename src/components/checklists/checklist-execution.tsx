@@ -98,6 +98,8 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
       const endTime = new Date()
 
       // Create execution - using simple fields only
+      const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000)
+
       const { data: execution, error: execError } = await supabase
         .from('checklist_executions')
         .insert({
@@ -110,6 +112,8 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
           longitude: gpsData?.lng || null,
           gps_accuracy: gpsData?.accuracy || null,
           status: 'completed',
+          execution_duration: duration,
+          qr_code_scanned: true,
           observations: observations || null,
         })
         .select()
@@ -120,9 +124,21 @@ export function ChecklistExecution({ qrData, onComplete, onCancel }: ChecklistEx
         throw new Error('Erro ao salvar execução: ' + execError.message)
       }
 
-      // Save responses as observations text (simpler approach)
+      // Save responses as observations text with Portuguese translation
+      const translateResponse = (response: string) => {
+        const translations: Record<string, string> = {
+          'true': 'Sim',
+          'false': 'Não',
+          'na': 'Não se aplica',
+          'ok': 'OK',
+          'attention': 'Atenção',
+          'critical': 'Crítico',
+        }
+        return translations[response] || response
+      }
+
       const responseText = items.map((item, index) => {
-        const response = responses[index] || 'Não respondido'
+        const response = responses[index] ? translateResponse(responses[index]) : 'Não respondido'
         return `${index + 1}. ${item.question}: ${response}`
       }).join('\n')
 
