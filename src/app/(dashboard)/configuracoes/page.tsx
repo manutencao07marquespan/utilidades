@@ -10,17 +10,14 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePermissions } from '@/hooks/use-permissions'
+import { StatusIndicator } from '@/components/shared/status-indicator'
 import {
-  Settings, Save, Building, MapPin, Bell, Shield,
-  Database, RefreshCw, CheckCircle, AlertTriangle,
-  Droplets, Mail, Globe, Clock, Loader2, Gauge
+  Settings, Save, Building, Bell, Shield, Database,
+  CheckCircle, AlertTriangle, Droplets, Mail, Clock,
+  Loader2, Gauge, Wrench, ClipboardCheck, FileText, Users,
+  Cloud, Zap, Activity, Package, Timer
 } from 'lucide-react'
-
-interface SystemConfig {
-  id: string
-  key: string
-  value: any
-}
+import { cn } from '@/lib/cn'
 
 export default function ConfiguracoesPage() {
   const { hasMinRole, loading: permsLoading } = usePermissions()
@@ -31,113 +28,77 @@ export default function ConfiguracoesPage() {
   const supabase = createClient()
 
   const [config, setConfig] = useState({
-    // Dados da ETE
-    company_name: '',
-    unit_name: '',
-    address: '',
-    city: '',
-    state: '',
-    phone: '',
-    email: '',
+    // Geral
+    company_name: '', unit_name: '', address: '', city: '', state: '', phone: '', email: '',
+    timezone: 'America/Sao_Paulo', language: 'pt-BR', logo_url: '',
 
-    // Configurações de Alertas
-    alert_ph_min: '6.0',
-    alert_ph_max: '9.0',
-    alert_turbidity_max: '20',
-    alert_cistern_min: '20',
-    enable_whatsapp: false,
-    whatsapp_number: '',
+    // Operação
+    alert_ph_min: '6.0', alert_ph_max: '9.0', alert_turbidity_max: '20',
+    alert_cistern_min: '20', efficiency_min: '90',
 
-    // Configurações de Alertas - Horímetros
-    alert_horimeter_min_interval: '6',
-    alert_horimeter_max_interval: '48',
-    alert_horimeter_warning_hours: '200',
-    alert_horimeter_critical_hours: '250',
+    // Horímetros
+    alert_horimeter_min_interval: '6', alert_horimeter_max_interval: '48',
+    alert_horimeter_warning_hours: '200', alert_horimeter_critical_hours: '250',
 
-    // Configurações de Alertas - Hidrômetros
-    alert_hydrant_min_interval: '6',
-    alert_hydrant_max_interval: '24',
-    alert_hydrant_deviation_percent: '20',
-    alert_hydrant_critical_level: '50',
+    // Hidrômetros
+    alert_hydrant_min_interval: '6', alert_hydrant_max_interval: '24',
+    alert_hydrant_deviation_percent: '20', alert_hydrant_critical_level: '50',
 
-    // Configurações de Relatórios
-    report_auto_generate: false,
-    report_time: '07:00',
-    report_recipients: '',
+    // Alarmes
+    enable_whatsapp: false, whatsapp_number: '',
+    enable_email: false, email_recipients: '',
+    enable_push: true,
 
-    // Configurações do Sistema
-    timezone: 'America/Sao_Paulo',
-    language: 'pt-BR',
-    date_format: 'DD/MM/YYYY',
-    items_per_page: '20',
+    // Turnos
+    shift_1a_start: '06:00', shift_1a_end: '18:00',
+    shift_1b_start: '18:00', shift_1b_end: '06:00',
 
-    // Configurações de Segurança
-    session_timeout: '30',
-    max_login_attempts: '5',
-    password_min_length: '6',
+    // APIs
+    openweather_api_key: '', google_maps_key: '',
 
-    // Configurações de Estoque
-    stock_alert_enabled: true,
-    stock_alert_days: '7',
+    // Manutenção
+    auto_generate_os: true,
+    os_trigger_nc: true,
+    os_trigger_preventive: true,
+    os_trigger_horimeter: true,
+
+    // Checklists
+    checklist_require_gps: false,
+    checklist_require_photo: false,
+    checklist_require_signature: true,
   })
 
-  useEffect(() => {
-    fetchConfig()
-  }, [])
+  useEffect(() => { fetchConfig() }, [])
 
   async function fetchConfig() {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('system_config')
-        .select('*')
-
+      const { data } = await supabase.from('system_config').select('*')
       if (data) {
         const configMap: any = {}
-        data.forEach((item: any) => {
-          configMap[item.key] = item.value
-        })
+        data.forEach((item: any) => { configMap[item.key] = item.value })
         setConfig(prev => ({ ...prev, ...configMap }))
       }
-    } catch (err) {
-      console.error('Error fetching config:', err)
-    }
+    } catch (err) { console.error(err) }
     setLoading(false)
   }
 
   async function saveConfig() {
-    setSaving(true)
-    setError(null)
-    setSuccess(null)
-
+    setSaving(true); setError(null); setSuccess(null)
     try {
-      const updates = Object.entries(config).map(([key, value]) => ({
-        key,
-        value: typeof value === 'boolean' ? value.toString() : value,
-      }))
-
-      for (const update of updates) {
-        const { error: upsertError } = await supabase
-          .from('system_config')
-          .upsert({ key: update.key, value: update.value }, { onConflict: 'key' })
-
-        if (upsertError) throw upsertError
+      for (const [key, value] of Object.entries(config)) {
+        await supabase.from('system_config').upsert(
+          { key, value: typeof value === 'boolean' ? value.toString() : value },
+          { onConflict: 'key' }
+        )
       }
-
       setSuccess('Configurações salvas com sucesso!')
-    } catch (err: any) {
-      setError(err.message || 'Erro ao salvar configurações')
-    } finally {
-      setSaving(false)
-    }
+    } catch (err: any) { setError(err.message) }
+    finally { setSaving(false) }
   }
 
   if (permsLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+    return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
 
   if (!hasMinRole('Admin')) {
@@ -145,7 +106,7 @@ export default function ConfiguracoesPage() {
       <div className="space-y-6">
         <PageHeader title="Configurações" description="Acesso restrito a administradores" />
         <Alert className="bg-[#DC3545]/10 border-[#DC3545]/30 text-[#DC3545]">
-          <AlertDescription>Apenas administradores podem acessar as configurações do sistema.</AlertDescription>
+          <AlertDescription>Apenas administradores podem acessar as configurações.</AlertDescription>
         </Alert>
       </div>
     )
@@ -153,490 +114,188 @@ export default function ConfiguracoesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Configurações do Sistema"
-        description="Gerencie as configurações gerais do Portal de Utilidades"
-        action={{
-          label: 'Salvar',
-          onClick: saveConfig,
-          icon: Save,
-        }}
-      />
+      <PageHeader title="Centro de Configurações" description="Parametrização completa do sistema"
+        action={{ label: 'Salvar', onClick: saveConfig, icon: Save }} />
 
-      {success && (
-        <Alert className="bg-[#28A745]/10 border-[#28A745]/30 text-[#28A745]">
-          <CheckCircle className="h-4 w-4" />
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
+      {success && <Alert className="bg-[#28A745]/10 border-[#28A745]/30 text-[#28A745]"><CheckCircle className="h-4 w-4" /><AlertDescription>{success}</AlertDescription></Alert>}
+      {error && <Alert className="bg-[#DC3545]/10 border-[#DC3545]/30 text-[#DC3545]"><AlertTriangle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
 
-      {error && (
-        <Alert className="bg-[#DC3545]/10 border-[#DC3545]/30 text-[#DC3545]">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs defaultValue="company">
-        <TabsList className="flex flex-wrap">
-          <TabsTrigger value="company">
-            <Building className="h-4 w-4 mr-2" />
-            Empresa
-          </TabsTrigger>
-          <TabsTrigger value="alerts">
-            <Bell className="h-4 w-4 mr-2" />
-            Alertas
-          </TabsTrigger>
-          <TabsTrigger value="reports">
-            <Database className="h-4 w-4 mr-2" />
-            Relatórios
-          </TabsTrigger>
-          <TabsTrigger value="system">
-            <Settings className="h-4 w-4 mr-2" />
-            Sistema
-          </TabsTrigger>
-          <TabsTrigger value="security">
-            <Shield className="h-4 w-4 mr-2" />
-            Segurança
-          </TabsTrigger>
+      <Tabs defaultValue="geral" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="geral"><Building className="h-4 w-4 mr-1" />Geral</TabsTrigger>
+          <TabsTrigger value="operacao"><Gauge className="h-4 w-4 mr-1" />Operação</TabsTrigger>
+          <TabsTrigger value="turnos"><Clock className="h-4 w-4 mr-1" />Turnos</TabsTrigger>
+          <TabsTrigger value="alarmes"><Bell className="h-4 w-4 mr-1" />Alarmes</TabsTrigger>
+          <TabsTrigger value="manutencao"><Wrench className="h-4 w-4 mr-1" />Manutenção</TabsTrigger>
+          <TabsTrigger value="checklists"><ClipboardCheck className="h-4 w-4 mr-1" />Checklists</TabsTrigger>
+          <TabsTrigger value="apis"><Cloud className="h-4 w-4 mr-1" />APIs</TabsTrigger>
+          <TabsTrigger value="seguranca"><Shield className="h-4 w-4 mr-1" />Segurança</TabsTrigger>
         </TabsList>
 
-        {/* Empresa */}
-        <TabsContent value="company">
+        {/* Geral */}
+        <TabsContent value="geral">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Dados da Empresa
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Building className="h-5 w-5" />Dados da Empresa</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Nome da Empresa</Label>
-                  <Input
-                    value={config.company_name}
-                    onChange={(e) => setConfig({ ...config, company_name: e.target.value })}
-                    placeholder="Ex: Marquespan"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nome da Unidade</Label>
-                  <Input
-                    value={config.unit_name}
-                    onChange={(e) => setConfig({ ...config, unit_name: e.target.value })}
-                    placeholder="Ex: ETE Principal"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Endereço</Label>
-                  <Input
-                    value={config.address}
-                    onChange={(e) => setConfig({ ...config, address: e.target.value })}
-                    placeholder="Rua, número, bairro"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cidade</Label>
-                  <Input
-                    value={config.city}
-                    onChange={(e) => setConfig({ ...config, city: e.target.value })}
-                    placeholder="Ex: São Paulo"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Estado</Label>
-                  <Input
-                    value={config.state}
-                    onChange={(e) => setConfig({ ...config, state: e.target.value })}
-                    placeholder="Ex: SP"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Telefone</Label>
-                  <Input
-                    value={config.phone}
-                    onChange={(e) => setConfig({ ...config, phone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={config.email}
-                    onChange={(e) => setConfig({ ...config, email: e.target.value })}
-                    placeholder="contato@empresa.com"
-                  />
+                <div className="space-y-2"><Label>Nome da Empresa</Label><Input value={config.company_name} onChange={e => setConfig({...config, company_name: e.target.value})} placeholder="Ex: Marquespan" /></div>
+                <div className="space-y-2"><Label>Nome da Unidade</Label><Input value={config.unit_name} onChange={e => setConfig({...config, unit_name: e.target.value})} placeholder="Ex: ETE Principal" /></div>
+                <div className="space-y-2"><Label>Endereço</Label><Input value={config.address} onChange={e => setConfig({...config, address: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Cidade</Label><Input value={config.city} onChange={e => setConfig({...config, city: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Estado</Label><Input value={config.state} onChange={e => setConfig({...config, state: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Telefone</Label><Input value={config.phone} onChange={e => setConfig({...config, phone: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Email</Label><Input type="email" value={config.email} onChange={e => setConfig({...config, email: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Timezone</Label>
+                  <select value={config.timezone} onChange={e => setConfig({...config, timezone: e.target.value})} className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm">
+                    <option value="America/Sao_Paulo">São Paulo (GMT-3)</option>
+                    <option value="America/Manaus">Manaus (GMT-4)</option>
+                  </select>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Alertas */}
-        <TabsContent value="alerts">
-          <div className="space-y-6">
-            {/* Alertas Gerais */}
+        {/* Operação */}
+        <TabsContent value="operacao">
+          <div className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Alertas Gerais
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label>pH Mínimo</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={config.alert_ph_min}
-                      onChange={(e) => setConfig({ ...config, alert_ph_min: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta abaixo</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>pH Máximo</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={config.alert_ph_max}
-                      onChange={(e) => setConfig({ ...config, alert_ph_max: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta acima</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Turbidez Máxima (NTU)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_turbidity_max}
-                      onChange={(e) => setConfig({ ...config, alert_turbidity_max: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Nível Mín. Cisterna (%)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_cistern_min}
-                      onChange={(e) => setConfig({ ...config, alert_cistern_min: e.target.value })}
-                    />
-                  </div>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Gauge className="h-5 w-5" />Limites Operacionais</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2"><Label>pH Mínimo</Label><Input type="number" step="0.1" value={config.alert_ph_min} onChange={e => setConfig({...config, alert_ph_min: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>pH Máximo</Label><Input type="number" step="0.1" value={config.alert_ph_max} onChange={e => setConfig({...config, alert_ph_max: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Turbidez Máxima (NTU)</Label><Input type="number" value={config.alert_turbidity_max} onChange={e => setConfig({...config, alert_turbidity_max: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Nível Mín. Cisterna (%)</Label><Input type="number" value={config.alert_cistern_min} onChange={e => setConfig({...config, alert_cistern_min: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Eficiência Mínima (%)</Label><Input type="number" value={config.efficiency_min} onChange={e => setConfig({...config, efficiency_min: e.target.value})} /></div>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Alertas de Horímetro */}
             <Card className="border-l-4 border-l-[#FFC107]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-[#FFC107]" />
-                  Parâmetros de Alerta - Horímetros
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Timer className="h-4 w-4 text-[#FFC107]" />Horímetros</CardTitle></CardHeader>
+              <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Intervalo Mínimo entre Leituras (horas)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_horimeter_min_interval}
-                      onChange={(e) => setConfig({ ...config, alert_horimeter_min_interval: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta se leitura inferior a este intervalo</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Intervalo Máximo entre Leituras (horas)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_horimeter_max_interval}
-                      onChange={(e) => setConfig({ ...config, alert_horimeter_max_interval: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta se leitura superior a este intervalo</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Horas para Aviso (warning)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_horimeter_warning_hours}
-                      onChange={(e) => setConfig({ ...config, alert_horimeter_warning_hours: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Próxima manutenção preventiva</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Horas para Alerta Crítico</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_horimeter_critical_hours}
-                      onChange={(e) => setConfig({ ...config, alert_horimeter_critical_hours: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Manutenção urgentemente necessária</p>
-                  </div>
+                  <div className="space-y-2"><Label>Intervalo Mín. (horas)</Label><Input type="number" value={config.alert_horimeter_min_interval} onChange={e => setConfig({...config, alert_horimeter_min_interval: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Intervalo Máx. (horas)</Label><Input type="number" value={config.alert_horimeter_max_interval} onChange={e => setConfig({...config, alert_horimeter_max_interval: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Aviso (horas)</Label><Input type="number" value={config.alert_horimeter_warning_hours} onChange={e => setConfig({...config, alert_horimeter_warning_hours: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Crítico (horas)</Label><Input type="number" value={config.alert_horimeter_critical_hours} onChange={e => setConfig({...config, alert_horimeter_critical_hours: e.target.value})} /></div>
                 </div>
               </CardContent>
             </Card>
-
-            {/* Alertas de Hidrômetro */}
             <Card className="border-l-4 border-l-[#00b4d8]">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Gauge className="h-4 w-4 text-[#00b4d8]" />
-                  Parâmetros de Alerta - Hidrômetros
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Droplets className="h-4 w-4 text-[#00b4d8]" />Hidrômetros</CardTitle></CardHeader>
+              <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Intervalo Mínimo entre Leituras (horas)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_hydrant_min_interval}
-                      onChange={(e) => setConfig({ ...config, alert_hydrant_min_interval: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta se leitura inferior</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Intervalo Máximo entre Leituras (horas)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_hydrant_max_interval}
-                      onChange={(e) => setConfig({ ...config, alert_hydrant_max_interval: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta se leitura superior</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Desvio Máximo Permitido (%)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_hydrant_deviation_percent}
-                      onChange={(e) => setConfig({ ...config, alert_hydrant_deviation_percent: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta se desvio da média</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Nível Crítico (m³)</Label>
-                    <Input
-                      type="number"
-                      value={config.alert_hydrant_critical_level}
-                      onChange={(e) => setConfig({ ...config, alert_hydrant_critical_level: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Alerta quando atingir</p>
-                  </div>
+                  <div className="space-y-2"><Label>Intervalo Mín. (horas)</Label><Input type="number" value={config.alert_hydrant_min_interval} onChange={e => setConfig({...config, alert_hydrant_min_interval: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Intervalo Máx. (horas)</Label><Input type="number" value={config.alert_hydrant_max_interval} onChange={e => setConfig({...config, alert_hydrant_max_interval: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Desvio Máx. (%)</Label><Input type="number" value={config.alert_hydrant_deviation_percent} onChange={e => setConfig({...config, alert_hydrant_deviation_percent: e.target.value})} /></div>
+                  <div className="space-y-2"><Label>Nível Crítico (m³)</Label><Input type="number" value={config.alert_hydrant_critical_level} onChange={e => setConfig({...config, alert_hydrant_critical_level: e.target.value})} /></div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* WhatsApp */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4" />
-                  Notificações WhatsApp
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={config.enable_whatsapp}
-                      onChange={(e) => setConfig({ ...config, enable_whatsapp: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Habilitar notificações WhatsApp</span>
-                  </label>
-                </div>
-                {config.enable_whatsapp && (
-                  <div className="space-y-2">
-                    <Label>Número WhatsApp</Label>
-                    <Input
-                      value={config.whatsapp_number}
-                      onChange={(e) => setConfig({ ...config, whatsapp_number: e.target.value })}
-                      placeholder="+5511999999999"
-                      className="max-w-xs"
-                    />
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        {/* Relatórios */}
-        <TabsContent value="reports">
+        {/* Turnos */}
+        <TabsContent value="turnos">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Configurações de Relatórios
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={config.report_auto_generate}
-                    onChange={(e) => setConfig({ ...config, report_auto_generate: e.target.checked })}
-                    className="rounded"
-                  />
-                  <span className="text-sm">Gerar relatórios automaticamente</span>
-                </label>
-              </div>
-
-              {config.report_auto_generate && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                  <div className="space-y-2">
-                    <Label>Horário de Geração</Label>
-                    <Input
-                      type="time"
-                      value={config.report_time}
-                      onChange={(e) => setConfig({ ...config, report_time: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Destinatários (email)</Label>
-                    <Input
-                      value={config.report_recipients}
-                      onChange={(e) => setConfig({ ...config, report_recipients: e.target.value })}
-                      placeholder="email1@email.com, email2@email.com"
-                    />
+            <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" />Configuração de Turnos</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <h4 className="font-medium mb-3 flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#28A745]"></span>Turno 1A</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Início</Label><Input type="time" value={config.shift_1a_start} onChange={e => setConfig({...config, shift_1a_start: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Fim</Label><Input type="time" value={config.shift_1a_end} onChange={e => setConfig({...config, shift_1a_end: e.target.value})} /></div>
                   </div>
                 </div>
-              )}
+                <div className="p-4 rounded-xl border bg-muted/30">
+                  <h4 className="font-medium mb-3 flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#00b4d8]"></span>Turno 1B</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2"><Label>Início</Label><Input type="time" value={config.shift_1b_start} onChange={e => setConfig({...config, shift_1b_start: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>Fim</Label><Input type="time" value={config.shift_1b_end} onChange={e => setConfig({...config, shift_1b_end: e.target.value})} /></div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Sistema */}
-        <TabsContent value="system">
+        {/* Alarmes */}
+        <TabsContent value="alarmes">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Configurações do Sistema
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" />Notificações</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Fuso Horário</Label>
-                  <select
-                    value={config.timezone}
-                    onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
-                  >
-                    <option value="America/Sao_Paulo">São Paulo (GMT-3)</option>
-                    <option value="America/Manaus">Manaus (GMT-4)</option>
-                    <option value="America/Belem">Belém (GMT-3)</option>
-                  </select>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.enable_whatsapp} onChange={e => setConfig({...config, enable_whatsapp: e.target.checked})} className="rounded" /><span className="text-sm">WhatsApp</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.enable_email} onChange={e => setConfig({...config, enable_email: e.target.checked})} className="rounded" /><span className="text-sm">Email</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.enable_push} onChange={e => setConfig({...config, enable_push: e.target.checked})} className="rounded" /><span className="text-sm">Push</span></label>
+              </div>
+              {config.enable_whatsapp && <div className="space-y-2"><Label>Nº WhatsApp</Label><Input value={config.whatsapp_number} onChange={e => setConfig({...config, whatsapp_number: e.target.value})} placeholder="+5511999999999" className="max-w-xs" /></div>}
+              {config.enable_email && <div className="space-y-2"><Label>Destinatários</Label><Input value={config.email_recipients} onChange={e => setConfig({...config, email_recipients: e.target.value})} placeholder="email1@email.com, email2@email.com" /></div>}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Manutenção */}
+        <TabsContent value="manutencao">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Wrench className="h-5 w-5" />Regras de Manutenção</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <h4 className="text-sm font-medium">Geração Automática de OS</h4>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.os_trigger_nc} onChange={e => setConfig({...config, os_trigger_nc: e.target.checked})} className="rounded" /><span className="text-sm">Não conformidade crítica gera OS</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.os_trigger_preventive} onChange={e => setConfig({...config, os_trigger_preventive: e.target.checked})} className="rounded" /><span className="text-sm">Preventiva vencida gera OS</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={config.os_trigger_horimeter} onChange={e => setConfig({...config, os_trigger_horimeter: e.target.checked})} className="rounded" /><span className="text-sm">Horímetro no limite gera preventiva</span></label>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Checklists */}
+        <TabsContent value="checklists">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5" />Configuração de Checklists</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={config.checklist_require_gps} onChange={e => setConfig({...config, checklist_require_gps: e.target.checked})} className="rounded" /><span className="text-sm">GPS obrigatório</span></label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={config.checklist_require_photo} onChange={e => setConfig({...config, checklist_require_photo: e.target.checked})} className="rounded" /><span className="text-sm">Foto obrigatória</span></label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={config.checklist_require_signature} onChange={e => setConfig({...config, checklist_require_signature: e.target.checked})} className="rounded" /><span className="text-sm">Assinatura obrigatória</span></label>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* APIs */}
+        <TabsContent value="apis">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Cloud className="h-5 w-5" />Integrações</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 rounded-xl border bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm">OpenWeather</span>
+                  <StatusIndicator variant={config.openweather_api_key ? 'ok' : 'inactive'} label={config.openweather_api_key ? 'Configurado' : 'Não configurado'} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Idioma</Label>
-                  <select
-                    value={config.language}
-                    onChange={(e) => setConfig({ ...config, language: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
-                  >
-                    <option value="pt-BR">Português (Brasil)</option>
-                  </select>
+                <Input type="password" value={config.openweather_api_key} onChange={e => setConfig({...config, openweather_api_key: e.target.value})} placeholder="Chave da API" />
+              </div>
+              <div className="p-4 rounded-xl border bg-muted/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm">Google Maps</span>
+                  <StatusIndicator variant={config.google_maps_key ? 'ok' : 'inactive'} label={config.google_maps_key ? 'Configurado' : 'Não configurado'} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Formato de Data</Label>
-                  <select
-                    value={config.date_format}
-                    onChange={(e) => setConfig({ ...config, date_format: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
-                  >
-                    <option value="DD/MM/YYYY">DD/MM/AAAA</option>
-                    <option value="MM/DD/YYYY">MM/DD/AAAA</option>
-                    <option value="YYYY-MM-DD">AAAA-MM-DD</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Itens por Página</Label>
-                  <select
-                    value={config.items_per_page}
-                    onChange={(e) => setConfig({ ...config, items_per_page: e.target.value })}
-                    className="w-full h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                </div>
+                <Input type="password" value={config.google_maps_key} onChange={e => setConfig({...config, google_maps_key: e.target.value})} placeholder="Chave da API" />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Segurança */}
-        <TabsContent value="security">
+        <TabsContent value="seguranca">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Configurações de Segurança
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5" />Segurança</CardTitle></CardHeader>
+            <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Timeout de Sessão (minutos)</Label>
-                  <Input
-                    type="number"
-                    value={config.session_timeout}
-                    onChange={(e) => setConfig({ ...config, session_timeout: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Tempo máximo inatividade</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Máximo de Tentativas de Login</Label>
-                  <Input
-                    type="number"
-                    value={config.max_login_attempts}
-                    onChange={(e) => setConfig({ ...config, max_login_attempts: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Após bloquear conta</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Comprimento Mínimo da Senha</Label>
-                  <Input
-                    type="number"
-                    value={config.password_min_length}
-                    onChange={(e) => setConfig({ ...config, password_min_length: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Mínimo de caracteres</p>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <h4 className="text-sm font-medium mb-3">Estoque</h4>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={config.stock_alert_enabled}
-                      onChange={(e) => setConfig({ ...config, stock_alert_enabled: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Alertas de estoque baixo</span>
-                  </label>
-                </div>
-                {config.stock_alert_enabled && (
-                  <div className="mt-3">
-                    <Label>Dias para alerta de validade</Label>
-                    <Input
-                      type="number"
-                      value={config.stock_alert_days}
-                      onChange={(e) => setConfig({ ...config, stock_alert_days: e.target.value })}
-                      className="max-w-xs"
-                    />
-                    <p className="text-xs text-muted-foreground">Alertar produtos que vencem em X dias</p>
-                  </div>
-                )}
+                <div className="space-y-2"><Label>Timeout Sessão (min)</Label><Input type="number" defaultValue="30" /></div>
+                <div className="space-y-2"><Label>Máx. Tentativas Login</Label><Input type="number" defaultValue="5" /></div>
+                <div className="space-y-2"><Label>Mín. Senha (chars)</Label><Input type="number" defaultValue="6" /></div>
               </div>
             </CardContent>
           </Card>
