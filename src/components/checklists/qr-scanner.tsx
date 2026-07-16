@@ -123,7 +123,60 @@ export function QRScanner({ onScan }: QRScannerProps) {
     setSuccess(null)
 
     try {
-      // Check if it's a checklist QR (format: checklist:uuid)
+      // Check if it's a checklist QR (format: CHECKLIST_xxx)
+      if (code.startsWith('CHECKLIST_')) {
+        const { data: template, error: tErr } = await supabase
+          .from('checklist_templates')
+          .select('id, name, category, sector')
+          .eq('qr_code_data', code.trim())
+          .single()
+
+        if (tErr || !template) {
+          // Try searching by ID
+          const templateId = code.replace('CHECKLIST_', '').split('_')[0]
+          const { data: templateById } = await supabase
+            .from('checklist_templates')
+            .select('id, name, category, sector')
+            .eq('id', templateId)
+            .single()
+
+          if (templateById) {
+            setSuccess(`Checklist: ${templateById.name}`)
+            setTimeout(() => {
+              onScan({
+                equipment_id: '',
+                equipment_name: templateById.name,
+                equipment_code: templateById.id.substring(0, 8).toUpperCase(),
+                sector: templateById.sector || '-',
+                template_id: templateById.id,
+                template_name: templateById.name,
+              })
+              setScanning(false)
+            }, 800)
+            return
+          }
+
+          setError('Checklist não encontrado')
+          setScanning(false)
+          return
+        }
+
+        setSuccess(`Checklist: ${template.name}`)
+        setTimeout(() => {
+          onScan({
+            equipment_id: '',
+            equipment_name: template.name,
+            equipment_code: template.id.substring(0, 8).toUpperCase(),
+            sector: template.sector || '-',
+            template_id: template.id,
+            template_name: template.name,
+          })
+          setScanning(false)
+        }, 800)
+        return
+      }
+
+      // Legacy format: checklist:uuid
       if (code.includes('checklist:') || code.includes('/checklists/scan/')) {
         const templateId = code.replace('checklist:', '').replace('https://portalutilidades.com/checklists/scan/', '')
         const { data: template, error: tErr } = await supabase

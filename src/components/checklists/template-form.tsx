@@ -100,6 +100,9 @@ export function TemplateForm({ onSuccess }: TemplateFormProps) {
         weight: item.weight,
       }))
 
+      // Generate QR code data
+      const qrCodeData = `CHECKLIST_${Date.now()}_${formData.name.replace(/\s/g, '_').toUpperCase()}`
+
       // Create template
       const { data: template, error: templateError } = await supabase
         .from('checklist_templates')
@@ -107,6 +110,7 @@ export function TemplateForm({ onSuccess }: TemplateFormProps) {
           name: formData.name,
           type: 'daily',
           items: itemsJson,
+          qr_code_data: qrCodeData,
           description: formData.description || null,
           category: formData.category,
           periodicity: formData.periodicity,

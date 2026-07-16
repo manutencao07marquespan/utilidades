@@ -18,6 +18,7 @@ interface ChecklistTemplate {
   name: string
   type: string
   category: string
+  qr_code_data?: string
   periodicity: string
   items: any
   sector: string | null
@@ -164,7 +165,9 @@ export function TemplatesList({ onRefresh }: TemplatesListProps) {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=checklist:${selectedTemplate.id}`
+    // Use the stored qr_code_data or generate from template ID
+    const qrData = selectedTemplate.qr_code_data || `CHECKLIST_${selectedTemplate.id}`
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`
     const itemsList = editItems.map((item, i) =>
       `<li style="padding:8px 0;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px">
         <span style="width:24px;height:24px;border:2px solid #28A745;border-radius:4px;display:inline-block"></span>
@@ -290,7 +293,7 @@ export function TemplatesList({ onRefresh }: TemplatesListProps) {
           {/* QR Code Preview */}
           <div className="flex items-center gap-6 p-4 rounded-xl bg-muted/30 border">
             <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=checklist:${selectedTemplate.id}`}
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(selectedTemplate.qr_code_data || `CHECKLIST_${selectedTemplate.id}`)}`}
               alt="QR Code"
               className="w-32 h-32 rounded-lg"
             />
