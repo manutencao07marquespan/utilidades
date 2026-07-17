@@ -50,14 +50,31 @@ export default function RelatoriosPage() {
   }
 
   async function fetchHistory() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('report_history')
-      .select('*, user_profiles(full_name)')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(20)
 
+    if (error) {
+      console.error('Error fetching history:', error)
+    }
+
     if (data) {
-      setHistory(data)
+      // Enrich with user names
+      const enriched = await Promise.all(data.map(async (report: any) => {
+        let userName = 'Sistema'
+        if (report.user_id) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', report.user_id)
+            .single()
+          if (profile) userName = profile.full_name
+        }
+        return { ...report, user_name: userName }
+      }))
+      setHistory(enriched)
     }
   }
 
