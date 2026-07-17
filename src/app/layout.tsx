@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PWAProvider } from "@/components/pwa-provider";
+import { ToastProvider } from "@/components/shared/toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,8 +54,10 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Portal Utilidades" />
       </head>
       <body className="min-h-full flex flex-col">
-        <PWAProvider />
-        {children}
+        <ToastProvider>
+          <PWAProvider />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );
