@@ -190,13 +190,13 @@ export default function RelatoriosPage() {
               ) : (
                 <div className="space-y-3">
                   {history.map((report) => (
-                    <div
+                    <button
                       key={report.id}
                       onClick={() => {
                         setSelectedReport({ type: report.report_type, name: report.report_name })
                         setActiveTab('select')
                       }}
-                      className="flex items-center gap-4 p-3 rounded-xl border hover:bg-muted/30 cursor-pointer transition-colors"
+                      className="w-full flex items-center gap-4 p-3 rounded-xl border hover:bg-muted/30 cursor-pointer transition-colors text-left"
                     >
                       <span className="text-lg">
                         {report.format === 'pdf' ? '📄' : report.format === 'excel' ? '📊' : '🖨️'}
@@ -211,7 +211,7 @@ export default function RelatoriosPage() {
                         variant="ok"
                         label={report.format.toUpperCase()}
                       />
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
