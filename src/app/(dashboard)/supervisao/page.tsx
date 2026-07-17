@@ -6,9 +6,11 @@ import { PageHeader } from '@/components/shared/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatsCard } from '@/components/shared/stats-card'
 import { StatusIndicator } from '@/components/shared/status-indicator'
+import { Button } from '@/components/ui/button'
 import {
   Activity, Droplets, AlertTriangle, CheckCircle, Clock, Users,
-  TrendingUp, TrendingDown, Timer, Target, BarChart3, UserCheck
+  TrendingUp, TrendingDown, Timer, Target, BarChart3, UserCheck,
+  Download, FileText
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { OperatorProductivity } from '@/components/supervisao/operator-productivity'
@@ -170,11 +172,83 @@ export default function SupervisaoPage() {
     )
   }
 
+  async function exportPDF() {
+    const { default: jsPDF } = await import('jspdf')
+    const doc = new jsPDF()
+
+    // Header
+    doc.setFontSize(18)
+    doc.setTextColor(26, 58, 90)
+    doc.text('Portal de Utilidades', 105, 20, { align: 'center' })
+    doc.setFontSize(14)
+    doc.text('Relatório de Supervisão', 105, 28, { align: 'center' })
+    doc.setFontSize(10)
+    doc.setTextColor(100, 100, 100)
+    doc.text(`Período: ${dateStart} a ${dateEnd}`, 105, 36, { align: 'center' })
+    doc.text(`Turno: ${selectedShift === 'all' ? 'Todos' : selectedShift}`, 105, 42, { align: 'center' })
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 105, 48, { align: 'center' })
+
+    // Stats
+    doc.setFontSize(12)
+    doc.setTextColor(26, 58, 90)
+    doc.text('Resumo Geral', 20, 65)
+    doc.setFontSize(10)
+    doc.setTextColor(60, 60, 60)
+    doc.text(`Checklists: ${stats.totalChecklists}`, 20, 75)
+    doc.text(`Tempo Médio: ${stats.avgTime} min`, 20, 82)
+    doc.text(`Operadores: ${stats.totalOperators}`, 20, 89)
+    doc.text(`Não Conformidades: ${stats.nonConformities}`, 20, 96)
+
+    // Operators
+    doc.setFontSize(12)
+    doc.setTextColor(26, 58, 90)
+    doc.text('Produtividade por Operador', 20, 115)
+    doc.setFontSize(9)
+    doc.setTextColor(60, 60, 60)
+
+    let yPos = 125
+    doc.text('Operador', 20, yPos)
+    doc.text('Checklists', 80, yPos)
+    doc.text('Tempo Médio', 115, yPos)
+    doc.text('Total', 145, yPos)
+    doc.text('NC', 175, yPos)
+
+    yPos += 8
+    doc.setDrawColor(200, 200, 200)
+    doc.line(20, yPos, 190, yPos)
+    yPos += 6
+
+    operatorStats.forEach((op) => {
+      if (yPos > 270) {
+        doc.addPage()
+        yPos = 20
+      }
+      doc.text(op.name.substring(0, 25), 20, yPos)
+      doc.text(op.checklistsCompleted.toString(), 80, yPos)
+      doc.text(`${op.avgTimeMinutes} min`, 115, yPos)
+      doc.text(`${Math.round(op.totalTimeMinutes)} min`, 145, yPos)
+      doc.text(op.nonConformities.toString(), 175, yPos)
+      yPos += 8
+    })
+
+    // Footer
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text('Portal de Utilidades - Sistema de Controle para ETE', 105, 290, { align: 'center' })
+
+    doc.save(`relatorio_supervisao_${dateStart}_${dateEnd}.pdf`)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Painel da Supervisão"
         description="Avaliação da equipe e tempo de checklists"
+        action={{
+          label: 'Exportar PDF',
+          onClick: exportPDF,
+          icon: Download,
+        }}
       />
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
