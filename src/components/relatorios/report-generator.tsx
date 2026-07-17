@@ -290,6 +290,40 @@ export function ReportGenerator({ reportType, reportName, onGenerate }: ReportGe
     URL.revokeObjectURL(url)
   }
 
+  function downloadExcel() {
+    if (!reportData) return
+
+    // Convert report data to CSV
+    let csvContent = ''
+    const dataKey = Object.keys(reportData).find(k => Array.isArray(reportData[k]))
+
+    if (dataKey && Array.isArray(reportData[dataKey]) && reportData[dataKey].length > 0) {
+      const headers = Object.keys(reportData[dataKey][0])
+      csvContent = headers.join(',') + '\n'
+      csvContent += reportData[dataKey].map((row: any) =>
+        headers.map(h => {
+          const val = row[h]
+          if (val === null || val === undefined) return ''
+          if (typeof val === 'object') return JSON.stringify(val)
+          return String(val).includes(',') ? `"${val}"` : val
+        }).join(',')
+      ).join('\n')
+    } else {
+      // Fallback: export as text
+      csvContent = formatReportAsText(reportData)
+    }
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${reportType}_${filters.start_date}_${filters.end_date}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -377,7 +411,11 @@ export function ReportGenerator({ reportType, reportName, onGenerate }: ReportGe
               <>
                 <Button variant="outline" onClick={downloadReport}>
                   <Download className="h-4 w-4 mr-2" />
-                  Baixar
+                  Baixar TXT
+                </Button>
+                <Button variant="outline" onClick={downloadExcel}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar CSV
                 </Button>
                 <Button variant="outline" onClick={() => window.print()}>
                   <Printer className="h-4 w-4 mr-2" />
