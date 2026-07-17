@@ -67,15 +67,24 @@ export function ReportGenerator({ reportType, reportName, onGenerate }: ReportGe
       setReportData(data)
 
       // Save to history
-      await supabase.from('report_history').insert({
-        user_id: (await supabase.auth.getUser()).data.user?.id,
+      const user = (await supabase.auth.getUser()).data.user
+      console.log('Saving report to history, user:', user?.id)
+
+      const { error: insertError } = await supabase.from('report_history').insert({
+        user_id: user?.id,
         report_type: reportType,
         report_name: reportName,
-        period_start: filters.start_date,
-        period_end: filters.end_date,
+        period_start: filters.start_date || null,
+        period_end: filters.end_date || null,
         format: 'pdf',
-        filters: filters,
+        filters: filters || null,
       })
+
+      if (insertError) {
+        console.error('Error saving report history:', insertError)
+      } else {
+        console.log('Report saved to history successfully')
+      }
 
       onGenerate?.(data)
     } catch (err: any) {
