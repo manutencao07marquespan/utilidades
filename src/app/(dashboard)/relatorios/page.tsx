@@ -192,7 +192,11 @@ export default function RelatoriosPage() {
                   {history.map((report) => (
                     <div
                       key={report.id}
-                      className="flex items-center gap-4 p-3 rounded-xl border hover:bg-muted/30"
+                      onClick={() => {
+                        setSelectedReport({ type: report.report_type, name: report.report_name })
+                        setActiveTab('select')
+                      }}
+                      className="flex items-center gap-4 p-3 rounded-xl border hover:bg-muted/30 cursor-pointer transition-colors"
                     >
                       <span className="text-lg">
                         {report.format === 'pdf' ? '📄' : report.format === 'excel' ? '📊' : '🖨️'}
@@ -200,7 +204,7 @@ export default function RelatoriosPage() {
                       <div className="flex-1">
                         <p className="text-sm font-medium">{report.report_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {report.user_profiles?.full_name || 'Sistema'} • {formatDate(report.created_at)}
+                          {report.user_name || 'Sistema'} • {formatDate(report.created_at)}
                         </p>
                       </div>
                       <StatusIndicator
