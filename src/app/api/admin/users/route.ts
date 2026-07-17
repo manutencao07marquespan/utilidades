@@ -1,9 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createUserSchema } from '@/lib/validations/usuarios'
+import { checkRateLimit, getClientIP } from '@/lib/security/rate-limit'
 
 export async function GET(request: Request) {
   try {
+    // Rate limiting
+    const ip = getClientIP(request)
+    const { allowed } = checkRateLimit(`get-users-${ip}`, { maxRequests: 50 })
+    if (!allowed) {
+      return NextResponse.json({ data: null, error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -58,6 +66,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting (more restrictive for write operations)
+    const ip = getClientIP(request)
+    const { allowed } = checkRateLimit(`create-user-${ip}`, { maxRequests: 10 })
+    if (!allowed) {
+      return NextResponse.json({ data: null, error: 'Rate limit exceeded' }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
