@@ -7,7 +7,8 @@ import { StatsCard } from '@/components/shared/stats-card'
 import { ProductForm } from '@/components/insumos/product-form'
 import { StockMovementForm } from '@/components/insumos/stock-movement-form'
 import { ProductsTable } from '@/components/insumos/products-table'
-import { Package, AlertTriangle, TrendingDown, Plus, ArrowUpDown } from 'lucide-react'
+import { StockMovementsList } from '@/components/insumos/stock-movements-list'
+import { Package, AlertTriangle, TrendingDown, Plus, ArrowUpDown, Clock } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export default function InsumosPage() {
@@ -83,6 +84,10 @@ export default function InsumosPage() {
             <ArrowUpDown className="h-4 w-4 mr-2" />
             Movimentação
           </TabsTrigger>
+          <TabsTrigger value="history">
+            <Clock className="h-4 w-4 mr-2" />
+            Histórico
+          </TabsTrigger>
           <TabsTrigger value="new">
             <Plus className="h-4 w-4 mr-2" />
             Novo Produto
@@ -95,6 +100,10 @@ export default function InsumosPage() {
 
         <TabsContent value="movement" className="space-y-6">
           <StockMovementForm onSuccess={() => setRefreshKey(k => k + 1)} />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <StockMovementsList refreshKey={refreshKey} />
         </TabsContent>
 
         <TabsContent value="new" className="space-y-6">

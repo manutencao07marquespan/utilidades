@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { StatsCard } from '@/components/shared/stats-card'
 import { DashboardGrid, DashboardGridItem } from '@/components/dashboard/dashboard-grid'
 import { PageHeader } from '@/components/shared/page-header'
+import { ErrorBoundary } from '@/components/dashboard/error-boundary'
 import { Activity, Droplets, AlertTriangle, CheckCircle, Gauge, BarChart3, Cloud } from 'lucide-react'
 import {
   LazyWeatherCard,
@@ -65,15 +66,45 @@ export default async function DashboardPage() {
   })
   const uniqueHydrants = Array.from(hydrantMap.values()).slice(0, 3)
 
-  const waterBalanceData = [
-    { date: 'Seg', input: 1200, output: 1150 },
-    { date: 'Ter', input: 1180, output: 1120 },
-    { date: 'Qua', input: 1250, output: 1200 },
-    { date: 'Qui', input: 1190, output: 1140 },
-    { date: 'Sex', input: 1220, output: 1180 },
-    { date: 'Sáb', input: 1100, output: 1050 },
-    { date: 'Dom', input: 980, output: 940 },
-  ]
+  // Calculate water balance from real data
+  const waterBalanceData = (() => {
+    if (!hydrants || hydrants.length === 0) {
+      return [
+        { date: 'Seg', input: 0, output: 0 },
+        { date: 'Ter', input: 0, output: 0 },
+        { date: 'Qua', input: 0, output: 0 },
+        { date: 'Qui', input: 0, output: 0 },
+        { date: 'Sex', input: 0, output: 0 },
+      ]
+    }
+
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+    const dailyData: Record<string, { input: number; output: number }> = {}
+
+    hydrants.forEach((h: any) => {
+      const date = new Date(h.reading_date)
+      const dayName = days[date.getDay()]
+      if (!dailyData[dayName]) dailyData[dayName] = { input: 0, output: 0 }
+
+      if (h.direction === 'input') {
+        dailyData[dayName].input += h.consumption || h.reading_value || 0
+      } else {
+        dailyData[dayName].output += h.consumption || h.reading_value || 0
+      }
+    })
+
+    return Object.entries(dailyData).map(([date, data]) => ({
+      date,
+      input: Math.round(data.input),
+      output: Math.round(data.output),
+    })).slice(0, 7)
+  })()
+
+  // Calculate production from real data
+  const totalInput = uniqueCisterns.reduce((sum, c) => sum + ((c.level / 100) * c.config.capacity), 0)
+  const avgEfficiency = analyses?.length > 0
+    ? analyses.reduce((sum: number, a: any) => sum + (a.decantation_efficiency || 95), 0) / analyses.length
+    : 95
 
   return (
     <div className="space-y-6">
@@ -87,9 +118,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <LazyWeatherCard />
-        <LazyWeatherForecastCard />
-        <LazyOperationalImpactCard />
+        <ErrorBoundary><LazyWeatherCard /></ErrorBoundary>
+        <ErrorBoundary><LazyWeatherForecastCard /></ErrorBoundary>
+        <ErrorBoundary><LazyOperationalImpactCard /></ErrorBoundary>
       </div>
 
       <DashboardGrid>
@@ -131,7 +162,12 @@ export default async function DashboardPage() {
         )}
 
         <DashboardGridItem span={2}>
-          <LazyProductionSummary totalInput={1200} totalOutput={1150} averageRetentionTime={8.5} efficiency={95.8} />
+          <LazyProductionSummary
+            totalInput={Math.round(totalInput)}
+            totalOutput={Math.round(totalInput * avgEfficiency / 100)}
+            averageRetentionTime={8.5}
+            efficiency={Math.round(avgEfficiency)}
+          />
         </DashboardGridItem>
       </DashboardGrid>
     </div>

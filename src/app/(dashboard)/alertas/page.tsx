@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/shared/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { StatusIndicator } from '@/components/shared/status-indicator'
-import { AlertTriangle, CheckCircle, Clock, Filter, Search } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Filter, Search, Download } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
 interface AlertHistory {
@@ -25,6 +26,8 @@ export default function AlertasPage() {
   const [search, setSearch] = useState('')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [dateStart, setDateStart] = useState('')
+  const [dateEnd, setDateEnd] = useState('')
   const supabase = createClient()
 
   useEffect(() => {
@@ -50,6 +53,13 @@ export default function AlertasPage() {
       query = query.eq('acknowledged', false)
     } else if (statusFilter === 'resolved') {
       query = query.eq('acknowledged', true)
+    }
+
+    if (dateStart) {
+      query = query.gte('triggered_at', dateStart)
+    }
+    if (dateEnd) {
+      query = query.lte('triggered_at', dateEnd + 'T23:59:59')
     }
 
     const { data } = await query
@@ -144,6 +154,18 @@ export default function AlertasPage() {
                 className="w-full h-10 pl-10 pr-4 rounded-xl border border-input bg-transparent text-sm focus-visible:border-[#28A745] focus-visible:ring-[#28A745]/30"
               />
             </div>
+            <input
+              type="date"
+              value={dateStart}
+              onChange={(e) => setDateStart(e.target.value)}
+              className="h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
+            />
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={(e) => setDateEnd(e.target.value)}
+              className="h-10 px-3 rounded-xl border border-input bg-transparent text-sm"
+            />
             <select
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
@@ -163,6 +185,23 @@ export default function AlertasPage() {
               <option value="active">Ativos</option>
               <option value="resolved">Resolvidos</option>
             </select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const csv = ['Data,Severidade,Mensagem,Status'].concat(
+                  alerts.map(a => `${a.triggered_at},${a.severity},"${a.message}",${a.acknowledged ? 'Resolvido' : 'Ativo'}`)
+                ).join('\n')
+                const blob = new Blob([csv], { type: 'text/csv' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'alertas.csv'
+                a.click()
+              }}
+            >
+              <Download className="h-4 w-4 mr-1" /> CSV
+            </Button>
           </div>
         </CardContent>
       </Card>

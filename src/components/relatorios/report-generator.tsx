@@ -232,45 +232,77 @@ export function ReportGenerator({ reportType, reportName, onGenerate }: ReportGe
   function formatReportAsText(data: any) {
     if (!data) return ''
 
-    let text = `${'='.repeat(50)}\n`
+    let text = `${'='.repeat(60)}\n`
+    text += `PORTAL DE UTILIDADES\n`
     text += `${data.title}\n`
     text += `Período: ${data.period}\n`
-    text += `${'='.repeat(50)}\n\n`
+    text += `Gerado em: ${new Date().toLocaleString('pt-BR')}\n`
+    text += `${'='.repeat(60)}\n\n`
 
     if (data.stats) {
-      text += `RESUMO:\n`
+      text += `RESUMO GERAL:\n`
+      text += `${'-'.repeat(40)}\n`
       Object.entries(data.stats).forEach(([key, value]) => {
-        text += `  ${key}: ${value}\n`
+        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (str: string) => str.toUpperCase())
+        text += `  ${label}: ${value}\n`
       })
       text += '\n'
     }
 
     if (data.analyses && data.analyses.length > 0) {
-      text += `ANÁLISES (${data.analyses.length} registros):\n`
-      data.analyses.slice(0, 10).forEach((a: any) => {
-        text += `  ${a.analysis_date} - pH: ${a.ph}, Turbidez: ${a.turbidity}\n`
+      text += `ANÁLISES LABORATORIAIS (${data.analyses.length} registros):\n`
+      text += `${'-'.repeat(40)}\n`
+      data.analyses.slice(0, 15).forEach((a: any) => {
+        text += `  ${a.analysis_date} | pH: ${a.ph || '-'} | Turbidez: ${a.turbidity || '-'} NTU | Temp: ${a.temperature || '-'}°C\n`
       })
-      if (data.analyses.length > 10) text += `  ... e mais ${data.analyses.length - 10} registros\n`
+      if (data.analyses.length > 15) text += `  ... e mais ${data.analyses.length - 15} registros\n`
       text += '\n'
     }
 
     if (data.orders && data.orders.length > 0) {
       text += `ORDENS DE SERVIÇO (${data.orders.length} registros):\n`
-      data.orders.slice(0, 10).forEach((o: any) => {
-        text += `  ${o.os_number} - ${o.title} (${o.status})\n`
+      text += `${'-'.repeat(40)}\n`
+      data.orders.slice(0, 15).forEach((o: any) => {
+        text += `  ${o.os_number} | ${o.title} | Status: ${o.status}\n`
       })
-      if (data.orders.length > 10) text += `  ... e mais ${data.orders.length - 10} registros\n`
+      if (data.orders.length > 15) text += `  ... e mais ${data.orders.length - 15} registros\n`
       text += '\n'
     }
 
     if (data.readings && data.readings.length > 0) {
       text += `LEITURAS (${data.readings.length} registros):\n`
-      data.readings.slice(0, 10).forEach((r: any) => {
+      text += `${'-'.repeat(40)}\n`
+      data.readings.slice(0, 15).forEach((r: any) => {
         const code = r.hydrant_code || r.well_code || r.cistern_code || '-'
-        text += `  ${r.reading_date} - ${code}\n`
+        const value = r.reading_value || r.current_hours || r.level_percentage || '-'
+        text += `  ${r.reading_date} | ${code} | ${value}\n`
       })
-      if (data.readings.length > 10) text += `  ... e mais ${data.readings.length - 10} registros\n`
+      if (data.readings.length > 15) text += `  ... e mais ${data.readings.length - 15} registros\n`
+      text += '\n'
     }
+
+    if (data.alarms && data.alarms.length > 0) {
+      text += `ALARMES (${data.alarms.length} registros):\n`
+      text += `${'-'.repeat(40)}\n`
+      data.alarms.slice(0, 15).forEach((a: any) => {
+        text += `  ${a.triggered_at?.split('T')[0] || '-'} | ${a.message || '-'} | Status: ${a.acknowledged ? 'Resolvido' : 'Ativo'}\n`
+      })
+      if (data.alarms.length > 15) text += `  ... e mais ${data.alarms.length - 15} registros\n`
+      text += '\n'
+    }
+
+    if (data.executions && data.executions.length > 0) {
+      text += `EXECUÇÕES DE CHECKLIST (${data.executions.length} registros):\n`
+      text += `${'-'.repeat(40)}\n`
+      data.executions.slice(0, 15).forEach((e: any) => {
+        text += `  ${e.started_at?.split('T')[0] || '-'} | Status: ${e.status} | NC: ${e.has_non_conformity ? 'Sim' : 'Não'}\n`
+      })
+      if (data.executions.length > 15) text += `  ... e mais ${data.executions.length - 15} registros\n`
+      text += '\n'
+    }
+
+    text += `${'='.repeat(60)}\n`
+    text += `Fim do Relatório\n`
 
     return text
   }

@@ -25,11 +25,13 @@ import {
   History,
   Settings,
   Cloud,
-  Target
+  Target,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { AlertIndicator } from '@/components/shared/alert-indicator'
+import { BottomNav } from '@/components/mobile/bottom-nav'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +56,7 @@ const navigation = [
   { name: 'Checklists', href: '/checklists', icon: ClipboardCheck },
   { name: 'Relatórios', href: '/relatorios', icon: FileText },
   { name: 'Alertas', href: '/alertas', icon: AlertTriangle },
+  { name: 'Integrações', href: '/integracoes', icon: Zap },
   { name: 'Usuários', href: '/usuarios', icon: Users },
   { name: 'Configurações', href: '/configuracoes', icon: Settings },
 ]
@@ -262,11 +265,14 @@ export default function DashboardLayout({
       </div>
 
       {/* Main Content */}
-      <main className="lg:pl-72">
+      <main className="lg:pl-72 pb-20 lg:pb-0">
         <div className="px-4 py-6 lg:px-8">
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <BottomNav />
     </div>
   )
 }
