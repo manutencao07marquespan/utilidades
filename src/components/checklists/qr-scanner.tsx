@@ -56,7 +56,7 @@ export function QRScanner({ onScan }: QRScannerProps) {
     const { data } = await supabase
       .from('assets')
       .select('id, name, asset_code, location')
-      .eq('is_active', true)
+      .eq('status', 'active')
       .order('name')
     if (data) setEquipmentList(data)
   }
