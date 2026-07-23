@@ -117,29 +117,7 @@ export default function ClimaPage() {
 
       setLastUpdate(new Date().toLocaleTimeString('pt-BR'))
 
-      // Fetch alerts (requires One Call API or alerts endpoint)
-      try {
-        const alertsRes = await fetch(
-          'https://api.openweathermap.org/data/2.5/onecall?lat=-23.55&lon=-46.63&appid=54b599f98d1fbbdad1bf443a86229008&exclude=minutely,daily,alerts=false'
-        )
-        if (alertsRes.ok) {
-          const alertsData = await alertsRes.json()
-          if (alertsData.alerts) {
-            setAlerts(alertsData.alerts.map((a: any) => ({
-              id: a.event || Date.now().toString(),
-              sender_name: a.sender_name || 'INMET',
-              event: a.event,
-              start: a.start,
-              end: a.end,
-              description: a.description,
-            })))
-          }
-        }
-      } catch (e) {
-        // Alerts API might not be available on free plan
-      }
-
-      // Generate alerts based on weather conditions (always check)
+      // Generate alerts based on weather conditions
       if (currentWeather) {
         const generatedAlerts: WeatherAlert[] = []
 
