@@ -13,6 +13,7 @@ export function setSecurityHeaders(response: NextResponse): NextResponse {
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    "media-src 'self' blob:",
   ].join('; ')
 
   response.headers.set('Content-Security-Policy', csp)
@@ -20,7 +21,8 @@ export function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)')
+  // Allow camera access for QR code scanning
+  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self), display-capture=(self)')
 
   return response
 }
