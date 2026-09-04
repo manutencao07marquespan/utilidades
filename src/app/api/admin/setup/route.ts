@@ -100,6 +100,7 @@ export async function POST(request: Request) {
         const { error: profileError } = await regularSupabase.from('user_profiles').insert({
           id: signUpData.user.id,
           full_name,
+          email,
           role: 'SuperAdmin',
           department: department || null,
           job_title: job_title || null,
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
       const { error: profileError } = await supabase.from('user_profiles').insert({
         id: authUser.user.id,
         full_name,
+        email,
         role: 'SuperAdmin',
         department: department || null,
         job_title: job_title || null,
