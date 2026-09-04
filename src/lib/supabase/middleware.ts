@@ -38,7 +38,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // Protected routes
-  const protectedRoutes = ['/dashboard', '/laboratorio', '/utilidades', '/insumos', '/residuos', '/manutencao', '/usuarios', '/atividades-preventivas', '/checklists', '/relatorios']
+  const protectedRoutes = ['/dashboard', '/laboratorio', '/utilidades', '/insumos', '/residuos', '/manutencao', '/usuarios', '/atividades-preventivas', '/checklists', '/relatorios', '/perfil']
   const isProtectedRoute = protectedRoutes.some(route => request.nextUrl.pathname.startsWith(route))
 
   // Setup page - accessible without auth but redirects if already has SuperAdmin

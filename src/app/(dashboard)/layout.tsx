@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   Bell,
+  User,
   Droplets,
   BarChart3,
   AlertTriangle,
@@ -140,8 +141,15 @@ export default function DashboardLayout({
             </ul>
           </nav>
 
-          {/* Logout */}
-          <div className="border-t border-white/10 pt-4">
+          {/* User Info + Logout */}
+          <div className="border-t border-white/10 pt-4 space-y-2">
+            <Link
+              href="/perfil"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/[0.06] hover:text-white transition-all"
+            >
+              <User className="h-4.5 w-4.5 shrink-0" />
+              {user?.email || 'Minha Conta'}
+            </Link>
             <Button
               variant="ghost"
               className="w-full justify-start text-white/50 hover:text-white hover:bg-white/[0.06] h-10"
@@ -190,6 +198,11 @@ export default function DashboardLayout({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/perfil')} className="cursor-pointer">
+                  <User className="h-4 w-4 mr-2" />
+                  Meu Perfil
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   Sair
@@ -255,6 +268,11 @@ export default function DashboardLayout({
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/perfil')} className="cursor-pointer">
+                  <User className="h-4 w-4 mr-2" />
+                  Meu Perfil
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   Sair
                 </DropdownMenuItem>
@@ -262,6 +280,7 @@ export default function DashboardLayout({
             </DropdownMenu>
           </div>
         </div>
+
       </div>
 
       {/* Main Content */}

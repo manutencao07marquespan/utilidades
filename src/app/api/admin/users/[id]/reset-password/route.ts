@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { resetPasswordSchema } from '@/lib/validations/usuarios'
 
@@ -27,7 +28,9 @@ export async function POST(
 
     const { password } = parsed.data
 
-    const { error } = await supabase.auth.admin.updateUserById(id, {
+    const adminSupabase = createAdminClient()
+
+    const { error } = await adminSupabase.auth.admin.updateUserById(id, {
       password,
     })
 

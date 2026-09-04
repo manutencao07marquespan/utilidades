@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { createUserSchema } from '@/lib/validations/usuarios'
 import { checkRateLimit, getClientIP } from '@/lib/security/rate-limit'
@@ -92,7 +93,9 @@ export async function POST(request: Request) {
 
     const { email, password, full_name, role_id, phone, job_title, department } = parsed.data
 
-    const { data: authUser, error: createError } = await supabase.auth.admin.createUser({
+    const adminSupabase = createAdminClient()
+
+    const { data: authUser, error: createError } = await adminSupabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -100,10 +103,11 @@ export async function POST(request: Request) {
 
     if (createError) throw createError
 
-    const { error: profileError } = await supabase.from('user_profiles').insert({
+    const { error: profileError } = await adminSupabase.from('user_profiles').insert({
       id: authUser.user.id,
       full_name,
-      role: role_id,
+      role_id,
+      job_title: job_title || null,
       phone: phone || null,
       department: department || null,
       is_active: true,
